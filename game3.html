@@ -2,23 +2,75 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>オワタの大冒険風アクション</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body {
+html, body {
   background: #000;
   overflow: hidden;
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  position: fixed;
+  top: 0; left: 0;
   font-family: 'MS Gothic', monospace;
 }
 canvas { display: block; image-rendering: pixelated; }
+
+/* 横向き強制用の回転コンテナ */
+#gameContainer {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 縦向き警告オーバーレイ */
+#rotateOverlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  background: #000;
+  z-index: 9999;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  color: #fff;
+  font-family: 'MS Gothic', monospace;
+}
+#rotateOverlay .icon {
+  font-size: 60px;
+  animation: rotateAnim 2s ease-in-out infinite;
+  margin-bottom: 20px;
+}
+#rotateOverlay .msg {
+  font-size: 18px;
+  text-align: center;
+  line-height: 1.6;
+}
+#rotateOverlay .tap-msg {
+  font-size: 14px;
+  color: #aaa;
+  margin-top: 20px;
+}
+@keyframes rotateAnim {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(90deg); }
+  75% { transform: rotate(90deg); }
+}
+
 #joystickArea {
   position: fixed; bottom: 20px; left: 20px;
   width: 140px; height: 140px; z-index: 10;
@@ -77,7 +129,16 @@ canvas { display: block; image-rendering: pixelated; }
 </head>
 <body>
 
-<canvas id="gameCanvas"></canvas>
+<div id="rotateOverlay">
+  <div class="icon">📱</div>
+  <div class="msg">スマホを横向きにしてください</div>
+  <div class="tap-msg">横向きにすると自動で開始します</div>
+</div>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+</div>
+
 <div id="joystickArea">
   <div id="joystickBase"></div>
   <div id="joystickKnob"></div>
@@ -89,11 +150,95 @@ canvas { display: block; image-rendering: pixelated; }
 <div id="pcControls">PC: ←→移動 | ↑/Space:ジャンプ(2段可) | Z/X:攻撃 | R:リトライ | T:最初から</div>
 
 <script>
+// ★ 全画面・横向き強制システム
+const rotateOverlay = document.getElementById('rotateOverlay');
+let isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+let fullscreenRequested = false;
+
+function requestFullscreen() {
+  const el = document.documentElement;
+  if (fullscreenRequested) return;
+  try {
+    if (el.requestFullscreen) el.requestFullscreen({ navigationUI: 'hide' }).catch(()=>{});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+    else if (el.msRequestFullscreen) el.msRequestFullscreen();
+    fullscreenRequested = true;
+  } catch(e) {}
+}
+
+function lockLandscape() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape').catch(()=>{});
+    }
+  } catch(e) {}
+}
+
+function checkOrientation() {
+  if (!isMobile) {
+    rotateOverlay.style.display = 'none';
+    return;
+  }
+  const isPortrait = window.innerHeight > window.innerWidth;
+  if (isPortrait) {
+    rotateOverlay.style.display = 'flex';
+  } else {
+    rotateOverlay.style.display = 'none';
+  }
+}
+
+// 画面タッチで全画面化
+function onFirstInteraction() {
+  if (isMobile) {
+    requestFullscreen();
+    lockLandscape();
+  }
+}
+
+document.addEventListener('touchstart', function firstTouch() {
+  onFirstInteraction();
+  document.removeEventListener('touchstart', firstTouch);
+}, { passive: true });
+
+document.addEventListener('click', function firstClick() {
+  onFirstInteraction();
+  document.removeEventListener('click', firstClick);
+});
+
+window.addEventListener('orientationchange', () => {
+  setTimeout(checkOrientation, 100);
+  setTimeout(resizeCanvas, 150);
+});
+window.addEventListener('resize', () => {
+  checkOrientation();
+  resizeCanvas();
+});
+
+// 全画面解除検知→再要求
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && isMobile) {
+    fullscreenRequested = false;
+  }
+});
+document.addEventListener('webkitfullscreenchange', () => {
+  if (!document.webkitFullscreenElement && isMobile) {
+    fullscreenRequested = false;
+  }
+});
+
+// 初期チェック
+setTimeout(checkOrientation, 100);
+
 // ★ ゲームクリア時の遷移先設定
 const gameNum = location.href.match(/game(\d+)/)?.[1] || '1';
 
 function gameClear() {
   localStorage.setItem('gameClear_' + gameNum, 'true');
+  // 全画面解除
+  try {
+    if (document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch(e) {}
   window.location.href = 'index.html?menu=1';
 }
 
@@ -105,7 +250,6 @@ function resizeCanvas() {
   canvas.height = window.innerHeight;
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
 
 const GRAVITY = 0.5;
 const TILE = 32;
@@ -230,11 +374,8 @@ btnB.addEventListener('mouseleave', () => {
   btnB.classList.remove('pressed');
 });
 
-// ★ RETRY = チェックポイントから再開
 btnStart.addEventListener('touchstart', (e) => { e.preventDefault(); retryFromCheckpoint(); }, { passive: false });
 btnStart.addEventListener('click', () => retryFromCheckpoint());
-
-// ★ 最初から = ステージの最初から
 btnRestart.addEventListener('touchstart', (e) => { e.preventDefault(); restartLevel(); }, { passive: false });
 btnRestart.addEventListener('click', () => restartLevel());
 
@@ -245,8 +386,8 @@ document.addEventListener('keydown', (e) => {
   if (!keys[e.code]) keyPressed[e.code] = true;
   keys[e.code] = true;
   if (e.key) keys[e.key.toLowerCase()] = true;
-  if (e.code === 'KeyR') retryFromCheckpoint(); // R = チェックポイントから
-  if (e.code === 'KeyT') restartLevel(); // T = 最初から
+  if (e.code === 'KeyR') retryFromCheckpoint();
+  if (e.code === 'KeyT') restartLevel();
   if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault();
 });
 document.addEventListener('keyup', (e) => {
@@ -269,7 +410,6 @@ LEVELS[0] = {
         m[y][x] = (y === this.height - 1) ? 1 : 0;
       }
     }
-    
     for (let x = 0; x < 12; x++) m[17][x] = 1;
     for (let x = 12; x < 15; x++) { m[17][x] = 0; m[16][x] = 2; }
     for (let x = 15; x < 25; x++) m[17][x] = 1;
@@ -301,7 +441,6 @@ LEVELS[0] = {
     m[15][88] = 19; m[13][90] = 19; m[15][92] = 19;
     m[17][90] = 2; m[17][94] = 2;
     m[16][96] = 3;
-    
     this.map = m;
     this.enemies = [
       { type: 'walker', x: 33 * TILE, y: 16 * TILE, dir: -1, speed: 2 },
@@ -331,7 +470,6 @@ LEVELS[1] = {
       m[y] = [];
       for (let x = 0; x < this.width; x++) m[y][x] = 0;
     }
-    
     for (let x = 0; x < 10; x++) m[19][x] = 1;
     m[18][5] = 12;
     for (let x = 10; x < 50; x++) m[19][x] = 7;
@@ -369,7 +507,6 @@ LEVELS[1] = {
     for (let x = 110; x < 120; x++) m[19][x] = 1;
     m[17][112] = 19; m[15][114] = 19; m[13][116] = 19;
     m[18][117] = 3;
-    
     this.map = m;
     this.lasers = [
       { x: 76 * TILE, y: 16 * TILE, horizontal: true, length: 18 * TILE, on: true, timer: 0, interval: 90 },
@@ -391,7 +528,7 @@ LEVELS[1] = {
   }
 };
 
-// Level 3 - ボスHP調整済み
+// Level 3
 LEVELS[2] = {
   name: "FINAL STAGE: 絶望の城",
   width: 150, height: 22,
@@ -402,7 +539,6 @@ LEVELS[2] = {
       m[y] = [];
       for (let x = 0; x < this.width; x++) m[y][x] = 0;
     }
-    
     for (let x = 0; x < 8; x++) m[21][x] = 1;
     m[20][4] = 12;
     for (let x = 8; x < 40; x++) m[21][x] = 7;
@@ -445,34 +581,27 @@ LEVELS[2] = {
     m[20][147] = 3;
     m[19][25] = 19; m[7][32] = 19; m[19][55] = 19;
     m[19][75] = 19; m[10][95] = 19; m[10][108] = 19;
-    
     this.map = m;
-    
     this.crushers = [
       { x: 48 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'up', timer: 0 },
       { x: 54 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'down', timer: 45 },
       { x: 60 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'up', timer: 90 },
     ];
-    
     this.lasers = [
       { x: 82 * TILE, y: 18 * TILE, horizontal: true, length: 7 * TILE, on: true, timer: 0, interval: 60 },
     ];
-    
     this.enemies = [
       { type: 'flyer', x: 20 * TILE, y: 14 * TILE, dir: 1, speed: 2, originY: 14 * TILE, flyRange: 3 * TILE },
       { type: 'walker', x: 50 * TILE, y: 20 * TILE, dir: -1, speed: 2 },
       { type: 'shooter', x: 75 * TILE, y: 20 * TILE, dir: 1, shootTimer: 0, shootInterval: 50 },
-      // ★ ボスHP: 5に減少（元は12）
       { type: 'boss', x: 132 * TILE, y: 17 * TILE, dir: -1, speed: 2.5, hp: 5, maxHp: 5, shootTimer: 0, shootInterval: 35, phase: 0 },
     ];
-    
     this.movingPlatforms = [
       { x: 13 * TILE, y: 17 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1, range: 5 * TILE },
       { x: 56 * TILE, y: 15 * TILE, w: 2 * TILE, h: 8, dx: 1, dy: 0, speed: 2, range: 3 * TILE },
       { x: 122 * TILE, y: 12 * TILE, w: 3 * TILE, h: 8, dx: 1, dy: 0, speed: 1.5, range: 5 * TILE },
       { x: 138 * TILE, y: 15 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1.2, range: 4 * TILE },
     ];
-    
     this.checkpoints = [{ x: 4, y: 20 }, { x: 45, y: 20 }, { x: 85, y: 20 }];
   }
 };
@@ -508,24 +637,19 @@ let disappearTimers = {};
 let attackCooldown = 0;
 let lastCheckpoint = null;
 
-// ★ チェックポイントから再開（RETRY）
 function retryFromCheckpoint() {
-  // チェックポイントは維持したまま再開
   loadLevel(currentLevel);
   gameState = 'playing';
 }
 
-// ★ ステージの最初から
 function restartLevel() {
-  lastCheckpoint = null; // チェックポイントをリセット
+  lastCheckpoint = null;
   loadLevel(currentLevel);
   gameState = 'playing';
 }
 
-// ★ 全リセット（タイトルに戻る時やゲームクリア後）
 function resetGame() {
   if (gameState === 'gameclear') {
-    // ★ ゲームクリア時はページ遷移
     gameClear();
     return;
   }
@@ -544,11 +668,8 @@ function loadLevel(idx) {
   }
   level = LEVELS[idx];
   level.build();
-  
-  // ★ チェックポイントがあればそこから、なければ最初から
   const spawnX = lastCheckpoint ? lastCheckpoint.x : level.startX;
   const spawnY = lastCheckpoint ? lastCheckpoint.y : level.startY;
-  
   player = {
     x: spawnX * TILE, y: spawnY * TILE,
     vx: 0, vy: 0, w: PLAYER_W, h: PLAYER_H,
@@ -557,14 +678,12 @@ function loadLevel(idx) {
     jumpCount: 0, maxJumps: MAX_JUMPS,
     coyoteTimer: 0, jumpBufferTimer: 0, wasOnGround: false,
   };
-  
   enemies = JSON.parse(JSON.stringify(level.enemies));
   enemies.forEach(e => {
     e.alive = true;
     e.originX = e.x;
     if (e.type === 'flyer') e.originY_start = e.originY;
   });
-  
   bullets = [];
   playerBullets = [];
   particles = [];
@@ -578,24 +697,23 @@ function loadLevel(idx) {
   gameState = 'playing';
 }
 
+// ========== 前半ここまで ==========
+
 function getTile(x, y) {
   const tx = Math.floor(x / TILE);
   const ty = Math.floor(y / TILE);
   if (!level || !level.map) return 1;
   if (ty < 0) return 0;
   if (ty >= level.height || tx < 0 || tx >= level.width) return 1;
-  
   for (let f of fakeTilesRemoved) {
     if (f.x === tx && f.y === ty) return 0;
   }
   for (let f of fallingPlatforms) {
     if (f.tx === tx && f.ty === ty && f.fallen) return 0;
   }
-  
   const tile = level.map[ty][tx];
   if (tile === 18 && switchActive) return 0;
   if (tile === 21 && hasKey) return 0;
-  
   return tile;
 }
 
@@ -617,23 +735,18 @@ function isDeadly(tile) {
 
 function updatePlayer() {
   if (!player.alive) return;
-
   let inputX = 0;
   let inputJump = false;
   let inputJumpPressed = false;
   let inputAttack = false;
-
   if (joystick.active) {
     inputX = joystick.x;
     if (Math.abs(inputX) < 0.2) inputX = 0;
   }
-  
   if (keys['ArrowLeft'] || keys['a'] || keys['KeyA']) inputX = -1;
   if (keys['ArrowRight'] || keys['d'] || keys['KeyD']) inputX = 1;
-  
   const jumpKeys = keys['ArrowUp'] || keys['w'] || keys['KeyW'] || keys[' '] || keys['Space'];
   inputJump = buttons.jump || jumpKeys;
-  
   if (keyPressed['ArrowUp'] || keyPressed['KeyW'] || keyPressed['Space']) {
     inputJumpPressed = true;
   }
@@ -641,28 +754,23 @@ function updatePlayer() {
     inputJumpPressed = true;
     buttons.jumpPressed = false;
   }
-  
   const attackKeys = keys['z'] || keys['x'] || keys['KeyZ'] || keys['KeyX'] || keys['Enter'];
   inputAttack = buttons.attack || attackKeys;
-  
   for (let k in keyPressed) keyPressed[k] = false;
 
   const accel = player.onGround ? 1.0 : 0.6;
   const friction = player.onIce ? 0.98 : (player.onGround ? 0.75 : 0.92);
   const maxSpeed = 5;
-  
   player.vx += inputX * accel;
   player.vx *= friction;
   if (Math.abs(player.vx) > maxSpeed) player.vx = Math.sign(player.vx) * maxSpeed;
   if (Math.abs(player.vx) < 0.1 && !player.onIce) player.vx = 0;
-
   if (inputX > 0) player.facing = 1;
   if (inputX < 0) player.facing = -1;
 
   const tileBelow = getTile(player.x + player.w / 2, player.y + player.h + 2);
   if (tileBelow === 10) player.vx -= 0.3;
   if (tileBelow === 11) player.vx += 0.3;
-
   const tileMid = getTile(player.x + player.w / 2, player.y + player.h / 2);
   if (tileMid === 22) {
     player.vy -= 0.9;
@@ -675,7 +783,6 @@ function updatePlayer() {
   } else {
     if (player.coyoteTimer > 0) player.coyoteTimer--;
   }
-  
   if (inputJumpPressed) {
     player.jumpBufferTimer = JUMP_BUFFER_TIME;
   } else if (player.jumpBufferTimer > 0) {
@@ -685,7 +792,6 @@ function updatePlayer() {
   const canFirstJump = player.onGround || player.coyoteTimer > 0;
   const canDoubleJump = !canFirstJump && player.jumpCount < player.maxJumps;
   const wantsToJump = player.jumpBufferTimer > 0 || inputJumpPressed;
-  
   if (wantsToJump) {
     if (canFirstJump && player.jumpCount === 0) {
       player.vy = -12;
@@ -704,16 +810,11 @@ function updatePlayer() {
           x: player.x + player.w / 2,
           y: player.y + player.h,
           vx: (i === 0 ? -3 : 3),
-          vy: 1,
-          life: 15,
-          color: '#88ffff',
-          size: 8,
-          type: 'ring'
+          vy: 1, life: 15, color: '#88ffff', size: 8, type: 'ring'
         });
       }
     }
   }
-  
   if (!inputJump && player.vy < -5) {
     player.vy = -5;
   }
@@ -731,7 +832,6 @@ function updatePlayer() {
 
   player.vy += GRAVITY;
   if (player.vy > 14) player.vy = 14;
-
   player.wasOnGround = player.onGround;
   player.x += player.vx;
   resolveCollisionX();
@@ -757,33 +857,28 @@ function updatePlayer() {
     for (let c of level.crushers) {
       if (player.x + player.w > c.x && player.x < c.x + c.w &&
           player.y + player.h > c.y && player.y < c.y + c.h) {
-        killPlayer();
-        return;
+        killPlayer(); return;
       }
     }
   }
-
   if (level.lasers) {
     for (let l of level.lasers) {
       if (!l.on) continue;
       if (l.horizontal) {
         if (player.y + player.h > l.y && player.y < l.y + 8 &&
             player.x + player.w > l.x && player.x < l.x + l.length) {
-          killPlayer();
-          return;
+          killPlayer(); return;
         }
       } else {
         if (player.x + player.w > l.x && player.x < l.x + 8 &&
             player.y + player.h > l.y && player.y < l.y + l.length) {
-          killPlayer();
-          return;
+          killPlayer(); return;
         }
       }
     }
   }
 
   checkTileEffects();
-  
   if (player.y > level.height * TILE + 100) killPlayer();
   if (player.x < 0) player.x = 0;
 
@@ -793,7 +888,6 @@ function updatePlayer() {
   } else {
     player.frame = 0;
   }
-
   if (player.invincible > 0) player.invincible--;
 
   for (let e of enemies) {
@@ -828,18 +922,12 @@ function resolveCollisionX() {
   const right = Math.floor((player.x + player.w - 1) / TILE);
   const top = Math.floor(player.y / TILE);
   const bottom = Math.floor((player.y + player.h - 1) / TILE);
-
   for (let ty = top; ty <= bottom; ty++) {
     for (let tx = left; tx <= right; tx++) {
       const tile = getTile(tx * TILE, ty * TILE);
       if (isSolid(tile)) {
-        if (player.vx > 0) {
-          player.x = tx * TILE - player.w;
-          player.vx = 0;
-        } else if (player.vx < 0) {
-          player.x = (tx + 1) * TILE;
-          player.vx = 0;
-        }
+        if (player.vx > 0) { player.x = tx * TILE - player.w; player.vx = 0; }
+        else if (player.vx < 0) { player.x = (tx + 1) * TILE; player.vx = 0; }
       }
     }
   }
@@ -850,7 +938,6 @@ function resolveCollisionY() {
   const right = Math.floor((player.x + player.w - 1) / TILE);
   const top = Math.floor(player.y / TILE);
   const bottom = Math.floor((player.y + player.h - 1) / TILE);
-
   for (let ty = top; ty <= bottom; ty++) {
     for (let tx = left; tx <= right; tx++) {
       const tile = getTile(tx * TILE, ty * TILE);
@@ -866,7 +953,6 @@ function resolveCollisionY() {
           player.vy = 0;
         }
       }
-      
       if (tile === 5 && player.vy > 0 && player.y + player.h >= ty * TILE) {
         player.vy = -16;
         player.onGround = false;
@@ -874,7 +960,6 @@ function resolveCollisionY() {
         screenShake = 3;
         spawnParticles(tx * TILE + TILE / 2, ty * TILE, 10, '#FF6600', 4);
       }
-      
       if (tile === 14 && player.vy > 0 && player.y + player.h >= ty * TILE) {
         player.vy = -20;
         player.onGround = false;
@@ -882,7 +967,6 @@ function resolveCollisionY() {
         screenShake = 5;
         spawnParticles(tx * TILE + TILE / 2, ty * TILE, 15, '#FF00FF', 5);
       }
-      
       if (tile === 9 && player.vy >= 0 && player.y + player.h >= ty * TILE && player.y + player.h <= ty * TILE + 10) {
         player.y = ty * TILE - player.h;
         player.vy = 0;
@@ -892,7 +976,6 @@ function resolveCollisionY() {
           fallingPlatforms.push({ tx, ty, timer: 25, fallen: false });
         }
       }
-      
       if (tile === 13 && player.vy >= 0 && player.y + player.h >= ty * TILE && player.y + player.h <= ty * TILE + 10) {
         player.y = ty * TILE - player.h;
         player.vy = 0;
@@ -913,78 +996,63 @@ function checkTileEffects() {
     [player.x + player.w - 2, player.y + player.h - 2],
     [cx, cy]
   ];
-  
   for (let [px, py] of points) {
     const tx = Math.floor(px / TILE);
     const ty = Math.floor(py / TILE);
     const tile = getTile(px, py);
-    
     if (isDeadly(tile)) { killPlayer(); return; }
-    
     if (tile === 3) {
       gameState = 'clear';
       clearTimer = 120;
-      // ★ クリア時はチェックポイントリセット
       lastCheckpoint = null;
       return;
     }
-    
     if (tile === 8) {
       if (!fakeTilesRemoved.find(f => f.x === tx && f.y === ty)) {
         setTimeout(() => fakeTilesRemoved.push({ x: tx, y: ty }), 80);
       }
     }
-    
     if (tile === 12) {
       lastCheckpoint = { x: tx, y: ty - 1 };
       level.map[ty][tx] = 0;
       spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 20, '#00FF00', 4);
       screenShake = 3;
     }
-    
     if (tile === 15) {
       for (let py2 = 0; py2 < level.height; py2++) {
         for (let px2 = 0; px2 < level.width; px2++) {
           if (level.map[py2][px2] === 16) {
-            player.x = px2 * TILE;
-            player.y = py2 * TILE;
+            player.x = px2 * TILE; player.y = py2 * TILE;
             player.jumpCount = 0;
             spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#AA00FF', 5);
-            screenShake = 8;
-            return;
+            screenShake = 8; return;
           }
         }
       }
     }
-    
     if (tile === 16) {
       for (let py2 = 0; py2 < level.height; py2++) {
         for (let px2 = 0; px2 < level.width; px2++) {
           if (level.map[py2][px2] === 15) {
-            player.x = px2 * TILE;
-            player.y = py2 * TILE;
+            player.x = px2 * TILE; player.y = py2 * TILE;
             player.jumpCount = 0;
             spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#AA00FF', 5);
-            screenShake = 8;
-            return;
+            screenShake = 8; return;
           }
         }
       }
     }
-    
     if (tile === 19) {
       level.map[ty][tx] = 0;
       totalCoins++;
       spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 10, '#FFD700', 3);
     }
-    
     if (tile === 20) {
       level.map[ty][tx] = 0;
       hasKey = true;
       spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 15, '#FFD700', 4);
       screenShake = 5;
     }
-    
     if (tile === 17) {
       if (!switchActive) {
         switchActive = true;
@@ -1024,16 +1092,14 @@ function killPlayer() {
 function updateEnemies() {
   for (let e of enemies) {
     if (!e.alive) continue;
-    
     switch (e.type) {
       case 'walker':
         e.x += e.dir * e.speed;
         const aheadX = e.x + (e.dir > 0 ? 28 : -4);
         const tileAhead = getTile(aheadX, e.y + 12);
-        const tileBelow = getTile(e.x + 12, e.y + 28);
-        if (isSolid(tileAhead) || (!isSolid(tileBelow) && tileBelow !== 7)) e.dir *= -1;
+        const tileBelowW = getTile(e.x + 12, e.y + 28);
+        if (isSolid(tileAhead) || (!isSolid(tileBelowW) && tileBelowW !== 7)) e.dir *= -1;
         break;
-        
       case 'jumper':
         e.x += e.dir * e.speed;
         e.jumpTimer = (e.jumpTimer || 0) + 1;
@@ -1048,14 +1114,12 @@ function updateEnemies() {
         const jAhead = getTile(e.x + (e.dir > 0 ? 28 : -4), e.y + 12);
         if (isSolid(jAhead)) e.dir *= -1;
         break;
-        
       case 'flyer':
         e.x += e.dir * e.speed;
         e._flyAngle = (e._flyAngle || 0) + 0.04;
         e.y = e.originY_start + Math.sin(e._flyAngle) * e.flyRange;
         if (e.x > e.originX + 80 || e.x < e.originX - 80) e.dir *= -1;
         break;
-        
       case 'shooter':
         e.shootTimer = (e.shootTimer || 0) + 1;
         if (e.shootTimer >= e.shootInterval) {
@@ -1066,20 +1130,16 @@ function updateEnemies() {
           bullets.push({ x: e.x + 12, y: e.y + 12, vx: dx / dist * 5, vy: dy / dist * 5, life: 100 });
         }
         break;
-        
       case 'boss':
         e.x += e.dir * e.speed;
         if (e.x < 118 * TILE || e.x > 144 * TILE) e.dir *= -1;
-        
         e.shootTimer = (e.shootTimer || 0) + 1;
         const bossInterval = e.hp < e.maxHp / 2 ? 25 : e.shootInterval;
-        
         if (e.shootTimer >= bossInterval) {
           e.shootTimer = 0;
           const dx = player.x - e.x;
           const dy = player.y - e.y;
           const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          
           const pattern = Math.floor(Math.random() * 3);
           if (pattern === 0) {
             bullets.push({ x: e.x + 24, y: e.y + 24, vx: dx / dist * 6, vy: dy / dist * 6, life: 100 });
@@ -1094,7 +1154,6 @@ function updateEnemies() {
             }
           }
         }
-        
         if (e.hp < e.maxHp / 3 && e.phase === 0) {
           e.phase = 1;
           e.speed = 3.5;
@@ -1145,9 +1204,9 @@ function updateEnemies() {
 
 function updateParticles() {
   particles = particles.filter(p => {
-    p.x += p.vx; p.y += p.vy; 
+    p.x += p.vx; p.y += p.vy;
     if (p.type !== 'ring') p.vy += 0.12;
-    p.life--; 
+    p.life--;
     if (p.type !== 'ring') p.size *= 0.96;
     return p.life > 0;
   });
@@ -1237,26 +1296,21 @@ function updateCamera() {
 
 function drawGame() {
   ctx.save();
-  
   let shakeX = 0, shakeY = 0;
   if (screenShake > 0) {
     shakeX = (Math.random() - 0.5) * screenShake * 2;
     shakeY = (Math.random() - 0.5) * screenShake * 2;
     screenShake--;
   }
-
   const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
   grad.addColorStop(0, '#0a0015');
   grad.addColorStop(0.5, '#1a0a2e');
   grad.addColorStop(1, '#0f2040');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  
   drawParallaxBG();
-
   ctx.save();
   ctx.translate(-camera.x + shakeX, -camera.y + shakeY);
-
   drawTiles();
   drawMovingPlatforms();
   drawCrushers();
@@ -1266,7 +1320,6 @@ function drawGame() {
   drawPlayerBullets();
   if (player.alive) drawPlayer();
   drawParticles();
-
   ctx.restore();
   drawUI();
   ctx.restore();
@@ -1287,12 +1340,10 @@ function drawTiles() {
   const endX = Math.min(level.width, Math.ceil((camera.x + canvas.width) / TILE) + 1);
   const startY = Math.max(0, Math.floor(camera.y / TILE) - 1);
   const endY = Math.min(level.height, Math.ceil((camera.y + canvas.height) / TILE) + 1);
-
   for (let ty = startY; ty < endY; ty++) {
     for (let tx = startX; tx < endX; tx++) {
       const tile = getTile(tx * TILE, ty * TILE);
       const x = tx * TILE, y = ty * TILE;
-
       switch (tile) {
         case 1:
           ctx.fillStyle = '#4a3728';
@@ -1539,7 +1590,6 @@ function drawLasers() {
 
 function drawPlayer() {
   if (player.invincible > 0 && player.invincible % 4 < 2) return;
-
   ctx.save();
   if (player.facing < 0) {
     ctx.translate(player.x + player.w, player.y);
@@ -1547,18 +1597,14 @@ function drawPlayer() {
   } else {
     ctx.translate(player.x, player.y);
   }
-
   ctx.fillStyle = 'rgba(0,0,0,0.3)';
   ctx.fillRect(2, player.h - 2, player.w - 4, 4);
-
   const isDoubleJumping = player.jumpCount >= 2 && !player.onGround;
-  
   ctx.fillStyle = '#ffddaa';
   ctx.fillRect(3, 0, 16, 12);
   ctx.fillStyle = isDoubleJumping ? '#44aaff' : '#4444ff';
   ctx.fillRect(3, 12, 16, 10);
   ctx.fillStyle = '#333';
-  
   if (!player.onGround) {
     ctx.fillRect(3, 22, 7, 4);
     ctx.fillRect(12, 20, 7, 4);
@@ -1574,21 +1620,18 @@ function drawPlayer() {
     ctx.fillRect(3, 22, 7, 4);
     ctx.fillRect(12, 22, 7, 4);
   }
-
   ctx.fillStyle = '#000';
   ctx.fillRect(6, 3, 3, 3);
   ctx.fillRect(13, 3, 3, 3);
   ctx.fillRect(8, 8, 6, 2);
   ctx.fillStyle = '#333';
   ctx.fillRect(3, 0, 16, 2);
-
   ctx.restore();
 }
 
 function drawEnemies() {
   for (let e of enemies) {
     if (!e.alive) continue;
-
     switch (e.type) {
       case 'walker':
         ctx.fillStyle = '#cc2222';
@@ -1710,21 +1753,16 @@ function drawUI() {
   ctx.textAlign = 'left';
   ctx.fillText(`💀 ${deaths}`, 10, 25);
   ctx.fillText(`💰 ${totalCoins}`, 10, 45);
-  
   ctx.fillStyle = player.jumpCount < 2 ? '#88ffff' : '#555';
   ctx.fillText(`⬆️ ${player.maxJumps - player.jumpCount}`, 10, 65);
-  
   if (hasKey) {
     ctx.fillStyle = '#FFD700';
     ctx.fillText('🔑 KEY', 10, 85);
   }
-  
-  // チェックポイント表示
   if (lastCheckpoint) {
     ctx.fillStyle = '#00ff00';
     ctx.fillText('✓ CP', 10, 105);
   }
-
   if (level) {
     ctx.textAlign = 'center';
     ctx.font = 'bold 14px monospace';
@@ -1776,7 +1814,6 @@ function drawUI() {
     ctx.font = 'bold 16px monospace';
     ctx.fillStyle = '#88ffff';
     ctx.fillText('★ 2段ジャンプ対応！ ★', canvas.width / 2, canvas.height / 2 - 35);
-    
     ctx.font = '14px monospace';
     ctx.fillStyle = '#aaa';
     ctx.fillText('【操作方法】', canvas.width / 2, canvas.height / 2 - 5);
@@ -1785,7 +1822,6 @@ function drawUI() {
     ctx.fillText('ジャンプ: ↑/W/Space (空中でもう1回!)', canvas.width / 2, canvas.height / 2 + 40);
     ctx.fillText('攻撃: Z / X / Bボタン', canvas.width / 2, canvas.height / 2 + 60);
     ctx.fillText('R:チェックポイントから / T:最初から', canvas.width / 2, canvas.height / 2 + 80);
-
     const blink = Math.sin(Date.now() * 0.006) > 0;
     if (blink) {
       ctx.fillStyle = '#FFD700';
@@ -1794,7 +1830,6 @@ function drawUI() {
     }
   }
 
-  // ★ ゲームクリア画面
   if (gameState === 'gameclear') {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1807,7 +1842,6 @@ function drawUI() {
     ctx.fillStyle = '#fff';
     ctx.fillText(`総死亡回数: ${deaths}`, canvas.width / 2, canvas.height / 2 - 10);
     ctx.fillText(`総コイン: ${totalCoins}`, canvas.width / 2, canvas.height / 2 + 20);
-    
     let rank = deaths === 0 ? 'S+ (神)' : deaths < 5 ? 'S (達人)' : deaths < 15 ? 'A (上級者)' : deaths < 30 ? 'B (中級者)' : deaths < 60 ? 'C (頑張った)' : 'D (ドンマイ)';
     ctx.fillStyle = '#FFD700';
     ctx.fillText(`ランク: ${rank}`, canvas.width / 2, canvas.height / 2 + 60);
@@ -1821,9 +1855,9 @@ canvas.addEventListener('touchstart', (e) => {
   if (gameState === 'title') {
     resetGame();
   } else if (gameState === 'dead' && deathTimer <= 0) {
-    retryFromCheckpoint(); // ★ チェックポイントから再開
+    retryFromCheckpoint();
   } else if (gameState === 'gameclear') {
-    gameClear(); // ★ メニューに遷移
+    gameClear();
   }
 }, { passive: true });
 
@@ -1831,9 +1865,9 @@ canvas.addEventListener('click', () => {
   if (gameState === 'title') {
     resetGame();
   } else if (gameState === 'dead' && deathTimer <= 0) {
-    retryFromCheckpoint(); // ★ チェックポイントから再開
+    retryFromCheckpoint();
   } else if (gameState === 'gameclear') {
-    gameClear(); // ★ メニューに遷移
+    gameClear();
   }
 });
 
@@ -1867,7 +1901,7 @@ function gameLoop() {
       updateParticles();
       if (clearTimer <= 0) {
         currentLevel++;
-        lastCheckpoint = null; // 次ステージはチェックポイントリセット
+        lastCheckpoint = null;
         if (currentLevel >= LEVELS.length) {
           gameState = 'gameclear';
         } else {
@@ -1887,3 +1921,9 @@ gameLoop();
 </script>
 </body>
 </html>
+
+// 後半に続く: getTile, updatePlayer, updateEnemies, 描画系, gameLoop
+
+
+</script>
+
