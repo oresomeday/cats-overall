@@ -157,7 +157,7 @@ const ctx = canvas.getContext('2d');
 
 // ★ モバイル判定 & 描画スケール
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-const renderScale = isMobile ? 0.5 : 1.0;
+const renderScale = isMobile ? 0.65 : 1.0;
 
 function getVW() { return canvas.width / renderScale; }
 function getVH() { return canvas.height / renderScale; }
@@ -1208,3 +1208,4 @@ gameState='title'; loadLevel(0); gameState='title'; gameLoop();
 </script>
 </body>
 </html>
+
