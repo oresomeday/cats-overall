@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>総合キャッツ。</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  font-family:'Hiragino Sans','Yu Gothic',sans-serif;
+  background:#0a0a1a;
+  color:#fff;
+  min-height:100vh;
+  overflow-x:hidden;
+}
+
+.particles {
+  position:fixed; top:0; left:0;
+  width:100%; height:100%;
+  pointer-events:none; z-index:0;
+}
+.particle {
+  position:absolute; border-radius:50%;
+  animation:floatUp linear infinite; opacity:0.6;
+}
+@keyframes floatUp {
+  0%{transform:translateY(100vh) scale(0);opacity:0}
+  10%{opacity:0.6} 90%{opacity:0.6}
+  100%{transform:translateY(-10vh) scale(1);opacity:0}
+}
+
+.screen {
+  display:none; flex-direction:column;
+  align-items:center; justify-content:center;
+  min-height:100vh; padding:20px;
+  position:relative; z-index:1;
+}
+.screen.active { display:flex; }
+
+#inputScreen {
+  background:radial-gradient(ellipse at center,#1a1a3e 0%,#0a0a1a 70%);
+}
+
+.input-title {
+  font-size:1.4em; margin-bottom:8px; text-align:center;
+  color:#aab; text-shadow:0 0 20px rgba(100,100,255,0.3);
+}
+.input-subtitle {
+  font-size:0.85em; color:#667; margin-bottom:25px; text-align:center;
+}
+.char-input-container { display:flex; gap:8px; margin-bottom:25px; }
+.char-box {
+  width:48px; height:62px;
+  background:rgba(255,255,255,0.05);
+  border:2px solid rgba(255,255,255,0.15);
+  border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.6em; color:#fff;
+  transition:all 0.3s; position:relative; overflow:hidden;
+}
+.char-box.active {
+  border-color:#6c63ff;
+  box-shadow:0 0 20px rgba(108,99,255,0.4),inset 0 0 20px rgba(108,99,255,0.1);
+}
+.char-box.filled {
+  border-color:#4ecdc4; background:rgba(78,205,196,0.1);
+  box-shadow:0 0 15px rgba(78,205,196,0.3);
+}
+.char-box.hint-revealed {
+  border-color:#ffd700; background:rgba(255,215,0,0.1);
+  box-shadow:0 0 20px rgba(255,215,0,0.3);
+}
+.char-box.hint-revealed::after {
+  content:''; position:absolute; bottom:3px;
+  width:24px; height:2px; background:#ffd700; border-radius:1px;
+}
+
+.keyboard { width:100%; max-width:380px; margin-bottom:15px; }
+.keyboard-row { display:flex; justify-content:center; gap:4px; margin-bottom:4px; }
+.key {
+  min-width:32px; height:42px;
+  background:linear-gradient(145deg,#2a2a4a,#1a1a3a);
+  border:1px solid rgba(255,255,255,0.1);
+  border-radius:8px; color:#ddd; font-size:0.95em;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; transition:all 0.15s;
+  -webkit-tap-highlight-color:transparent; user-select:none;
+}
+.key:active {
+  background:linear-gradient(145deg,#4a4a7a,#3a3a6a);
+  transform:scale(0.93); box-shadow:0 0 15px rgba(108,99,255,0.5);
+}
+.key.special {
+  min-width:50px; background:linear-gradient(145deg,#3a2a5a,#2a1a4a);
+  font-size:0.7em; color:#aaf;
+}
+.key.enter-key {
+  min-width:70px; background:linear-gradient(145deg,#2a5a3a,#1a4a2a);
+  color:#4ecdc4; font-weight:bold; font-size:0.8em;
+}
+
+.idk-btn {
+  margin-top:10px; padding:12px 35px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:30px; color:#889;
+  font-size:0.85em; font-weight:600;
+  cursor:pointer; transition:all 0.3s;
+  -webkit-tap-highlight-color:transparent;
+}
+.idk-btn:active {
+  transform:scale(0.95); background:rgba(255,255,255,0.12); color:#aab;
+}
+
+#menuScreen {
+  background:radial-gradient(ellipse at top,#1a1a3e 0%,#0a0a1a 70%);
+}
+.menu-header { text-align:center; margin-bottom:25px; }
+.menu-title {
+  font-size:2em; font-weight:900;
+  background:linear-gradient(135deg,#6c63ff,#4ecdc4,#ff6b9d);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text; margin-bottom:6px;
+  animation:titleGlow 3s ease-in-out infinite;
+}
+@keyframes titleGlow {
+  0%,100%{filter:brightness(1)} 50%{filter:brightness(1.3)}
+}
+.menu-subtitle { color:#667; font-size:0.85em; }
+
+.hint-bar {
+  display:flex; gap:8px; margin-bottom:25px;
+  padding:14px 18px;
+  background:rgba(255,255,255,0.03);
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;
+}
+.hint-char {
+  width:38px; height:48px;
+  background:rgba(255,255,255,0.05);
+  border:2px solid rgba(255,255,255,0.1);
+  border-radius:10px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.2em; color:#555; transition:all 0.5s;
+}
+.hint-char.revealed {
+  color:#ffd700; border-color:#ffd700;
+  background:rgba(255,215,0,0.1);
+  box-shadow:0 0 15px rgba(255,215,0,0.2);
+  animation:hintPop 0.5s ease;
+}
+@keyframes hintPop {
+  0%{transform:scale(1)} 50%{transform:scale(1.3)} 100%{transform:scale(1)}
+}
+
+.games-grid {
+  display:flex; flex-direction:column; gap:12px;
+  width:100%; max-width:400px;
+}
+.game-card {
+  position:relative; padding:18px; border-radius:16px;
+  text-decoration:none; color:#fff; overflow:hidden;
+  transition:all 0.3s;
+  border:1px solid rgba(255,255,255,0.1);
+  display:flex; align-items:center; gap:14px;
+  -webkit-tap-highlight-color:transparent;
+}
+.game-card::before {
+  content:''; position:absolute; top:0; left:0;
+  width:100%; height:100%; opacity:0.15; transition:opacity 0.3s;
+}
+.game-card:active { transform:scale(0.97); }
+
+.game-card:nth-child(1){background:linear-gradient(135deg,rgba(255,107,157,0.2),rgba(255,107,157,0.05))}
+.game-card:nth-child(1)::before{background:linear-gradient(135deg,#ff6b9d,#ff2d7a)}
+.game-card:nth-child(1) .game-icon{background:linear-gradient(135deg,#ff6b9d,#ff2d7a)}
+.game-card:nth-child(2){background:linear-gradient(135deg,rgba(108,99,255,0.2),rgba(108,99,255,0.05))}
+.game-card:nth-child(2)::before{background:linear-gradient(135deg,#6c63ff,#4834d4)}
+.game-card:nth-child(2) .game-icon{background:linear-gradient(135deg,#6c63ff,#4834d4)}
+.game-card:nth-child(3){background:linear-gradient(135deg,rgba(78,205,196,0.2),rgba(78,205,196,0.05))}
+.game-card:nth-child(3)::before{background:linear-gradient(135deg,#4ecdc4,#2cb5ac)}
+.game-card:nth-child(3) .game-icon{background:linear-gradient(135deg,#4ecdc4,#2cb5ac)}
+.game-card:nth-child(4){background:linear-gradient(135deg,rgba(255,165,0,0.2),rgba(255,165,0,0.05))}
+.game-card:nth-child(4)::before{background:linear-gradient(135deg,#ffa500,#ff8c00)}
+.game-card:nth-child(4) .game-icon{background:linear-gradient(135deg,#ffa500,#ff8c00)}
+.game-card:nth-child(5){background:linear-gradient(135deg,rgba(0,206,255,0.2),rgba(0,206,255,0.05))}
+.game-card:nth-child(5)::before{background:linear-gradient(135deg,#00ceff,#0099cc)}
+.game-card:nth-child(5) .game-icon{background:linear-gradient(135deg,#00ceff,#0099cc)}
+.game-card:nth-child(6){background:linear-gradient(135deg,rgba(180,100,255,0.2),rgba(180,100,255,0.05))}
+.game-card:nth-child(6)::before{background:linear-gradient(135deg,#b464ff,#8a2be2)}
+.game-card:nth-child(6) .game-icon{background:linear-gradient(135deg,#b464ff,#8a2be2)}
+
+.game-icon {
+  width:50px; height:50px; border-radius:14px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.5em; flex-shrink:0;
+  box-shadow:0 4px 15px rgba(0,0,0,0.3);
+}
+.game-info { flex:1; }
+.game-name { font-size:1em; font-weight:700; }
+.game-status {
+  font-size:0.65em; padding:4px 10px;
+  border-radius:20px; font-weight:600; flex-shrink:0;
+}
+.game-status.not-cleared { background:rgba(255,255,255,0.1); color:#888; }
+.game-status.cleared { background:rgba(78,205,196,0.2); color:#4ecdc4; }
+
+.menu-bottom-btns {
+  display:flex; flex-direction:column; align-items:center; gap:12px;
+  margin-top:20px;
+}
+
+.secret-room-btn {
+  padding:14px 35px;
+  background:rgba(255,215,0,0.06);
+  border:1px solid rgba(255,215,0,0.2);
+  border-radius:30px; color:#b8a040;
+  font-size:0.9em; font-weight:600;
+  cursor:pointer; transition:all 0.3s;
+  -webkit-tap-highlight-color:transparent;
+  animation:secretBtnGlow 3s ease-in-out infinite;
+}
+.secret-room-btn:active {
+  transform:scale(0.95); background:rgba(255,215,0,0.15);
+}
+@keyframes secretBtnGlow {
+  0%,100%{box-shadow:0 0 0 rgba(255,215,0,0)}
+  50%{box-shadow:0 0 20px rgba(255,215,0,0.15)}
+}
+
+.back-to-input-btn {
+  padding:14px 40px;
+  background:linear-gradient(135deg,#6c63ff,#4ecdc4);
+  border:none; border-radius:30px; color:#fff;
+  font-size:1em; font-weight:700;
+  cursor:pointer; transition:all 0.3s;
+  box-shadow:0 4px 20px rgba(108,99,255,0.3);
+  -webkit-tap-highlight-color:transparent;
+}
+.back-to-input-btn:active { transform:scale(0.95); }
+
+/* ===== SECRET ROOM ===== */
+#secretRoomScreen {
+  background:radial-gradient(ellipse at center,#12101e 0%,#050510 70%);
+}
+.secret-header { text-align:center; margin-bottom:30px; }
+.secret-title {
+  font-size:1.8em; font-weight:900;
+  background:linear-gradient(135deg,#ffd700,#ffaa00,#ffd700);
+  background-size:200% 200%;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text;
+  animation:goldShimmer 3s linear infinite;
+  margin-bottom:6px;
+}
+.secret-subtitle { color:#555; font-size:0.8em; }
+
+.secret-links-container {
+  display:flex; flex-direction:column; gap:10px;
+  width:100%; max-width:400px;
+  min-height:100px;
+}
+
+.secret-empty {
+  text-align:center; padding:40px 20px; color:#2a2a3a;
+  font-size:1.5em; letter-spacing:8px;
+}
+
+.secret-link-card {
+  display:flex; align-items:center; gap:14px;
+  padding:16px 20px;
+  background:rgba(255,215,0,0.04);
+  border:1px solid rgba(255,215,0,0.15);
+  border-radius:14px;
+  text-decoration:none; color:#ffd700;
+  transition:all 0.3s;
+  -webkit-tap-highlight-color:transparent;
+  animation:secretCardIn 0.5s ease both;
+}
+.secret-link-card:active {
+  transform:scale(0.97);
+  background:rgba(255,215,0,0.12);
+  box-shadow:0 0 25px rgba(255,215,0,0.2);
+}
+@keyframes secretCardIn {
+  from{opacity:0;transform:translateY(15px)}
+  to{opacity:1;transform:translateY(0)}
+}
+.secret-link-icon {
+  width:44px; height:44px; border-radius:12px;
+  background:linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,170,0,0.1));
+  border:1px solid rgba(255,215,0,0.2);
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.3em; flex-shrink:0;
+}
+.secret-link-name {
+  flex:1; font-size:1.05em; font-weight:700;
+  color:#e8c84a;
+}
+.secret-link-arrow {
+  font-size:0.9em; color:rgba(255,215,0,0.5);
+}
+
+.secret-link-card.bonus {
+  border-color:rgba(255,107,157,0.2);
+  background:rgba(255,107,157,0.04);
+}
+.secret-link-card.bonus .secret-link-icon {
+  background:linear-gradient(135deg,rgba(255,107,157,0.2),rgba(180,100,255,0.1));
+  border-color:rgba(255,107,157,0.2);
+}
+.secret-link-card.bonus .secret-link-name { color:#ff8ab5; }
+.secret-link-card.bonus .secret-link-arrow { color:rgba(255,107,157,0.5); }
+
+.back-to-menu-btn {
+  margin-top:25px; padding:14px 40px;
+  background:rgba(255,255,255,0.06);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:30px; color:#888;
+  font-size:0.9em; font-weight:600;
+  cursor:pointer; transition:all 0.3s;
+  -webkit-tap-highlight-color:transparent;
+}
+.back-to-menu-btn:active {
+  transform:scale(0.95); background:rgba(255,255,255,0.12);
+}
+
+/* ===== ENDING ===== */
+#endingScreen {
+  background:#000; text-align:center;
+  overflow:hidden; position:relative;
+}
+#endingScreen::before {
+  content:''; position:absolute; top:0; left:0;
+  width:100%; height:100%;
+  background:
+    radial-gradient(ellipse at 20% 50%,rgba(108,99,255,0.15) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 50%,rgba(255,107,157,0.15) 0%,transparent 50%),
+    radial-gradient(ellipse at 50% 20%,rgba(255,215,0,0.1) 0%,transparent 50%),
+    radial-gradient(ellipse at 50% 80%,rgba(78,205,196,0.1) 0%,transparent 50%);
+  animation:endingBgShift 6s ease-in-out infinite;
+}
+@keyframes endingBgShift {
+  0%,100%{opacity:0.6;transform:scale(1)} 50%{opacity:1;transform:scale(1.05)}
+}
+.ending-fireworks {
+  position:absolute; top:0; left:0;
+  width:100%; height:100%;
+  pointer-events:none; z-index:1;
+}
+.firework {
+  position:absolute; width:6px; height:6px;
+  border-radius:50%; animation:fireworkBurst 2s ease-out infinite;
+}
+@keyframes fireworkBurst {
+  0%{transform:scale(0);opacity:1;box-shadow:
+    0 0 0 0 currentColor,0 0 0 0 currentColor,0 0 0 0 currentColor,0 0 0 0 currentColor,
+    0 0 0 0 currentColor,0 0 0 0 currentColor,0 0 0 0 currentColor,0 0 0 0 currentColor}
+  50%{opacity:1}
+  100%{transform:scale(1);opacity:0;box-shadow:
+    0 -60px 0 0 currentColor,42px -42px 0 0 currentColor,60px 0 0 0 currentColor,42px 42px 0 0 currentColor,
+    0 60px 0 0 currentColor,-42px 42px 0 0 currentColor,-60px 0 0 0 currentColor,-42px -42px 0 0 currentColor}
+}
+.confetti-container {
+  position:absolute; top:0; left:0;
+  width:100%; height:100%;
+  pointer-events:none; z-index:1; overflow:hidden;
+}
+.confetti {
+  position:absolute; top:-10px; width:10px; height:14px;
+  border-radius:2px; animation:confettiFall linear infinite;
+}
+@keyframes confettiFall {
+  0%{transform:translateY(-10px) rotateZ(0deg) rotateX(0deg);opacity:1}
+  100%{transform:translateY(100vh) rotateZ(720deg) rotateX(360deg);opacity:0.3}
+}
+.ending-content {
+  position:relative; z-index:10;
+  display:flex; flex-direction:column; align-items:center;
+}
+.ending-crown {
+  font-size:4em; margin-bottom:10px;
+  animation:crownFloat 2s ease-in-out infinite;
+  filter:drop-shadow(0 0 20px rgba(255,215,0,0.6));
+}
+@keyframes crownFloat {
+  0%,100%{transform:translateY(0) scale(1)} 50%{transform:translateY(-12px) scale(1.05)}
+}
+.ending-stars { display:flex; gap:8px; margin-bottom:15px; }
+.ending-star {
+  font-size:1.8em; animation:starTwinkle 1.5s ease-in-out infinite;
+  filter:drop-shadow(0 0 10px rgba(255,215,0,0.5));
+}
+.ending-star:nth-child(1){animation-delay:0s}
+.ending-star:nth-child(2){animation-delay:0.2s}
+.ending-star:nth-child(3){animation-delay:0.4s}
+.ending-star:nth-child(4){animation-delay:0.6s}
+.ending-star:nth-child(5){animation-delay:0.8s}
+@keyframes starTwinkle {
+  0%,100%{transform:scale(1) rotate(0deg);opacity:0.7}
+  50%{transform:scale(1.3) rotate(20deg);opacity:1}
+}
+.ending-title {
+  font-size:2.8em; font-weight:900;
+  background:linear-gradient(135deg,#ffd700,#ffaa00,#ffd700,#fff8dc,#ffd700);
+  background-size:200% 200%;
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  background-clip:text; margin-bottom:5px;
+  animation:goldShimmer 3s linear infinite;
+  letter-spacing:4px;
+}
+@keyframes goldShimmer {
+  0%{background-position:0% 50%} 100%{background-position:200% 50%}
+}
+.ending-subtitle {
+  font-size:1em; color:#ffd700; margin-bottom:25px;
+  letter-spacing:6px; text-transform:uppercase; opacity:0.8;
+  animation:subtitlePulse 2s ease-in-out infinite;
+}
+@keyframes subtitlePulse {
+  0%,100%{opacity:0.6;letter-spacing:6px} 50%{opacity:1;letter-spacing:8px}
+}
+.ending-divider {
+  width:200px; height:2px;
+  background:linear-gradient(90deg,transparent,#ffd700,transparent);
+  margin-bottom:25px; position:relative;
+}
+.ending-divider::before {
+  content:'◆'; position:absolute; top:50%; left:50%;
+  transform:translate(-50%,-50%);
+  color:#ffd700; font-size:0.8em; background:#000; padding:0 10px;
+}
+.ending-message {
+  color:#ccc; font-size:1.05em; margin-bottom:12px; line-height:2;
+  animation:fadeInUp 1s ease 0.5s both;
+}
+@keyframes fadeInUp {
+  from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)}
+}
+.ending-password-reveal {
+  display:flex; gap:10px; margin-bottom:30px;
+  animation:fadeInUp 1s ease 1s both;
+}
+.ending-char {
+  width:50px; height:60px;
+  background:linear-gradient(135deg,rgba(255,215,0,0.2),rgba(255,215,0,0.05));
+  border:2px solid #ffd700; border-radius:12px;
+  display:flex; align-items:center; justify-content:center;
+  font-size:1.5em; color:#ffd700;
+  box-shadow:0 0 20px rgba(255,215,0,0.2),inset 0 0 20px rgba(255,215,0,0.05);
+  animation:charGlow 2s ease-in-out infinite;
+}
+@keyframes charGlow {
+  0%,100%{box-shadow:0 0 20px rgba(255,215,0,0.2),inset 0 0 20px rgba(255,215,0,0.05)}
+  50%{box-shadow:0 0 35px rgba(255,215,0,0.5),inset 0 0 30px rgba(255,215,0,0.1)}
+}
+.ending-btn-container { animation:fadeInUp 1s ease 1.5s both; }
+.ending-btn {
+  position:relative; display:inline-block;
+  padding:18px 60px; font-size:1.2em; font-weight:900;
+  color:#fff;
+  background:linear-gradient(135deg,#ffd700,#ff6b9d,#6c63ff,#4ecdc4);
+  background-size:300% 300%;
+  border:none; border-radius:50px; cursor:pointer;
+  text-decoration:none; letter-spacing:3px;
+  box-shadow:0 0 30px rgba(255,215,0,0.4),0 0 60px rgba(255,107,157,0.2),0 8px 30px rgba(0,0,0,0.3);
+  animation:btnRainbow 4s linear infinite,btnPulse 2s ease-in-out infinite;
+  transition:transform 0.2s;
+  -webkit-tap-highlight-color:transparent; overflow:hidden;
+}
+.ending-btn::before {
+  content:''; position:absolute;
+  top:-2px; left:-2px; right:-2px; bottom:-2px;
+  background:linear-gradient(135deg,#ffd700,#ff6b9d,#6c63ff,#4ecdc4,#ffd700);
+  background-size:400% 400%; border-radius:52px;
+  z-index:-1; animation:btnRainbow 4s linear infinite;
+  filter:blur(8px); opacity:0.7;
+}
+.ending-btn::after {
+  content:''; position:absolute;
+  top:0; left:-100%; width:100%; height:100%;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent);
+  animation:btnShine 3s ease-in-out infinite;
+}
+@keyframes btnRainbow {
+  0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%}
+}
+@keyframes btnPulse {
+  0%,100%{transform:scale(1)} 50%{transform:scale(1.03)}
+}
+@keyframes btnShine {
+  0%{left:-100%} 50%,100%{left:100%}
+}
+.ending-btn:active { transform:scale(0.95)!important; }
+.ending-bottom-text {
+  margin-top:25px; color:#555; font-size:0.75em;
+  animation:fadeInUp 1s ease 2s both;
+}
+.ending-bottom-btns {
+  display:flex; flex-direction:column; align-items:center; gap:10px;
+  animation:fadeInUp 1s ease 2.2s both;
+}
+.restart-btn {
+  padding:10px 30px;
+  background:rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.15);
+  border-radius:30px; color:#666;
+  font-size:0.8em; font-weight:600; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:all 0.3s;
+}
+.restart-btn:active {
+  transform:scale(0.95); background:rgba(255,255,255,0.15);
+}
+.back-to-menu-from-ending {
+  padding:10px 30px;
+  background:rgba(255,215,0,0.08);
+  border:1px solid rgba(255,215,0,0.2);
+  border-radius:30px; color:#b8a040;
+  font-size:0.8em; font-weight:600; cursor:pointer;
+  -webkit-tap-highlight-color:transparent;
+  transition:all 0.3s;
+}
+.back-to-menu-from-ending:active {
+  transform:scale(0.95); background:rgba(255,215,0,0.15);
+}
+.sparkle-ring {
+  position:absolute; width:120px; height:120px;
+  border:2px solid transparent;
+  border-top-color:#ffd700; border-right-color:#ff6b9d;
+  border-radius:50%;
+  animation:sparkleRingSpin 3s linear infinite;
+  opacity:0.4; pointer-events:none;
+}
+@keyframes sparkleRingSpin {
+  from{transform:translate(-50%,-50%) rotate(0deg)}
+  to{transform:translate(-50%,-50%) rotate(360deg)}
+}
+.sparkle-ring.ring2 {
+  width:150px; height:150px;
+  border-top-color:#6c63ff; border-right-color:#4ecdc4;
+  animation-duration:4s; animation-direction:reverse; opacity:0.25;
+}
+
+@keyframes shake {
+  0%,100%{transform:translateX(0)}
+  20%{transform:translateX(-8px)} 40%{transform:translateX(8px)}
+  60%{transform:translateX(-5px)} 80%{transform:translateX(5px)}
+}
+.shake { animation:shake 0.4s ease; }
+
+.fade-in { animation:fadeIn 0.6s ease; }
+@keyframes fadeIn {
+  from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)}
+}
+
+.message {
+  position:fixed; top:30px; left:50%;
+  transform:translateX(-50%);
+  padding:12px 28px; border-radius:30px;
+  font-size:0.9em; font-weight:600;
+  z-index:100; opacity:0; transition:opacity 0.3s;
+  pointer-events:none; white-space:nowrap;
+}
+.message.show { opacity:1; }
+.message.error {
+  background:rgba(255,80,80,0.2);
+  border:1px solid rgba(255,80,80,0.4); color:#ff5050;
+}
+.message.success {
+  background:rgba(78,205,196,0.2);
+  border:1px solid rgba(78,205,196,0.4); color:#4ecdc4;
+}
+.message.unlock {
+  background:rgba(255,215,0,0.2);
+  border:1px solid rgba(255,215,0,0.4); color:#ffd700;
+}
+
+@media (max-height:700px) {
+  .key{height:36px;font-size:0.85em}
+  .char-box{width:42px;height:54px;font-size:1.4em}
+  .input-title{font-size:1.1em}
+  .input-subtitle{margin-bottom:15px}
+  .keyboard{margin-bottom:8px}
+  .ending-title{font-size:2em}
+  .ending-crown{font-size:3em}
+}
+@media (max-width:350px) {
+  .key{min-width:26px;font-size:0.8em}
+  .char-box{width:38px;height:50px}
+  .char-input-container{gap:5px}
+}
+</style>
+</head>
+<body>
+
+<div class="particles" id="particles"></div>
+<div class="message" id="message"></div>
+
+<!-- ===== 入力画面 ===== -->
+<div class="screen active" id="inputScreen">
+  <div class="input-title">🔮 秘密の合言葉を入力せよ</div>
+  <div class="input-subtitle">ひらがなを入力してください</div>
+
+  <div class="char-input-container" id="charBoxes">
+    <div class="char-box active" data-index="0"></div>
+    <div class="char-box" data-index="1"></div>
+    <div class="char-box" data-index="2"></div>
+    <div class="char-box" data-index="3"></div>
+    <div class="char-box" data-index="4"></div>
+    <div class="char-box" data-index="5"></div>
+  </div>
+
+  <div class="keyboard" id="keyboard">
+    <div class="keyboard-row">
+      <div class="key" data-char="あ">あ</div><div class="key" data-char="い">い</div>
+      <div class="key" data-char="う">う</div><div class="key" data-char="え">え</div>
+      <div class="key" data-char="お">お</div><div class="key" data-char="ぁ">ぁ</div>
+      <div class="key" data-char="ぃ">ぃ</div><div class="key" data-char="ぅ">ぅ</div>
+      <div class="key" data-char="ぇ">ぇ</div><div class="key" data-char="ぉ">ぉ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="か">か</div><div class="key" data-char="き">き</div>
+      <div class="key" data-char="く">く</div><div class="key" data-char="け">け</div>
+      <div class="key" data-char="こ">こ</div><div class="key" data-char="が">が</div>
+      <div class="key" data-char="ぎ">ぎ</div><div class="key" data-char="ぐ">ぐ</div>
+      <div class="key" data-char="げ">げ</div><div class="key" data-char="ご">ご</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="さ">さ</div><div class="key" data-char="し">し</div>
+      <div class="key" data-char="す">す</div><div class="key" data-char="せ">せ</div>
+      <div class="key" data-char="そ">そ</div><div class="key" data-char="ざ">ざ</div>
+      <div class="key" data-char="じ">じ</div><div class="key" data-char="ず">ず</div>
+      <div class="key" data-char="ぜ">ぜ</div><div class="key" data-char="ぞ">ぞ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="た">た</div><div class="key" data-char="ち">ち</div>
+      <div class="key" data-char="つ">つ</div><div class="key" data-char="て">て</div>
+      <div class="key" data-char="と">と</div><div class="key" data-char="だ">だ</div>
+      <div class="key" data-char="ぢ">ぢ</div><div class="key" data-char="づ">づ</div>
+      <div class="key" data-char="で">で</div><div class="key" data-char="ど">ど</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="な">な</div><div class="key" data-char="に">に</div>
+      <div class="key" data-char="ぬ">ぬ</div><div class="key" data-char="ね">ね</div>
+      <div class="key" data-char="の">の</div><div class="key" data-char="は">は</div>
+      <div class="key" data-char="ひ">ひ</div><div class="key" data-char="ふ">ふ</div>
+      <div class="key" data-char="へ">へ</div><div class="key" data-char="ほ">ほ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="ば">ば</div><div class="key" data-char="び">び</div>
+      <div class="key" data-char="ぶ">ぶ</div><div class="key" data-char="べ">べ</div>
+      <div class="key" data-char="ぼ">ぼ</div><div class="key" data-char="ぱ">ぱ</div>
+      <div class="key" data-char="ぴ">ぴ</div><div class="key" data-char="ぷ">ぷ</div>
+      <div class="key" data-char="ぺ">ぺ</div><div class="key" data-char="ぽ">ぽ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="ま">ま</div><div class="key" data-char="み">み</div>
+      <div class="key" data-char="む">む</div><div class="key" data-char="め">め</div>
+      <div class="key" data-char="も">も</div><div class="key" data-char="や">や</div>
+      <div class="key" data-char="ゆ">ゆ</div><div class="key" data-char="よ">よ</div>
+      <div class="key" data-char="ゃ">ゃ</div><div class="key" data-char="ゅ">ゅ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key" data-char="ら">ら</div><div class="key" data-char="り">り</div>
+      <div class="key" data-char="る">る</div><div class="key" data-char="れ">れ</div>
+      <div class="key" data-char="ろ">ろ</div><div class="key" data-char="わ">わ</div>
+      <div class="key" data-char="を">を</div><div class="key" data-char="ん">ん</div>
+      <div class="key" data-char="ょ">ょ</div><div class="key" data-char="っ">っ</div>
+    </div>
+    <div class="keyboard-row">
+      <div class="key special" data-action="backspace">⌫ 戻す</div>
+      <div class="key special" data-action="clear">✕ 全消</div>
+      <div class="key enter-key" data-action="submit">✓ 決定</div>
+    </div>
+  </div>
+
+  <button class="idk-btn" onclick="goToMenu()">🎮 わからない…ヒントを集める</button>
+</div>
+
+<!-- ===== メニュー画面 ===== -->
+<div class="screen" id="menuScreen">
+  <div class="menu-header fade-in">
+    <div class="menu-title">GAME SELECT</div>
+    <div class="menu-subtitle">ゲームをクリアしてヒントを集めよう</div>
+  </div>
+
+  <div class="hint-bar fade-in" id="hintBar">
+    <div class="hint-char" data-hint="0">？</div>
+    <div class="hint-char" data-hint="1">？</div>
+    <div class="hint-char" data-hint="2">？</div>
+    <div class="hint-char" data-hint="3">？</div>
+    <div class="hint-char" data-hint="4">？</div>
+    <div class="hint-char" data-hint="5">？</div>
+  </div>
+
+  <div class="games-grid fade-in" id="gamesGrid">
+    <a class="game-card" href="game1.html" data-game="1">
+      <div class="game-icon">⚔️</div>
+      <div class="game-info">
+        <div class="game-name">Game 1 - 炎の試練</div>
+      </div>
+      <span class="game-status" id="status1">未クリア</span>
+    </a>
+    <a class="game-card" href="game2.html" data-game="2">
+      <div class="game-icon">🧩</div>
+      <div class="game-info">
+        <div class="game-name">Game 2 - 知恵の迷宮</div>
+      </div>
+      <span class="game-status" id="status2">未クリア</span>
+    </a>
+    <a class="game-card" href="game3.html" data-game="3">
+      <div class="game-icon">🎵</div>
+      <div class="game-info">
+        <div class="game-name">Game 3 - 音のリズム</div>
+      </div>
+      <span class="game-status" id="status3">未クリア</span>
+    </a>
+    <a class="game-card" href="game4.html" data-game="4">
+      <div class="game-icon">🌌</div>
+      <div class="game-info">
+        <div class="game-name">Game 4 - 星の記憶</div>
+      </div>
+      <span class="game-status" id="status4">未クリア</span>
+    </a>
+    <a class="game-card" href="game5.html" data-game="5">
+      <div class="game-icon">🏃</div>
+      <div class="game-info">
+        <div class="game-name">Game 5 - 風の疾走</div>
+      </div>
+      <span class="game-status" id="status5">未クリア</span>
+    </a>
+    <a class="game-card" href="game6.html" data-game="6">
+      <div class="game-icon">🔮</div>
+      <div class="game-info">
+        <div class="game-name">Game 6 - 魂の最終章</div>
+      </div>
+      <span class="game-status" id="status6">未クリア</span>
+    </a>
+  </div>
+
+  <div class="menu-bottom-btns">
+    <button class="secret-room-btn" onclick="goToSecretRoom()">🚪 秘密の部屋</button>
+    <button class="back-to-input-btn" onclick="goToInput()">🔮 合言葉入力へ</button>
+  </div>
+</div>
+
+<!-- ===== 秘密の部屋 ===== -->
+<div class="screen" id="secretRoomScreen">
+  <div class="secret-header fade-in">
+    <div class="secret-title">🚪 秘密の部屋</div>
+    <div class="secret-subtitle">条件を満たすとなにかが現れる…</div>
+  </div>
+
+  <div class="secret-links-container fade-in" id="secretLinks">
+    <div class="secret-empty" id="secretEmpty">…</div>
+  </div>
+
+  <button class="back-to-menu-btn" onclick="goToMenu()">← ゲーム選択に戻る</button>
+</div>
+
+<!-- ===== エンディング ===== -->
+<div class="screen" id="endingScreen">
+  <div class="ending-fireworks" id="endingFireworks"></div>
+  <div class="confetti-container" id="confettiContainer"></div>
+
+  <div class="ending-content">
+    <div style="position:relative;display:inline-block;margin-bottom:5px;">
+      <div class="sparkle-ring" style="position:absolute;top:50%;left:50%;"></div>
+      <div class="sparkle-ring ring2" style="position:absolute;top:50%;left:50%;"></div>
+      <div class="ending-crown">👑</div>
+    </div>
+
+    <div class="ending-stars">
+      <span class="ending-star">⭐</span>
+      <span class="ending-star">✨</span>
+      <span class="ending-star">⭐</span>
+      <span class="ending-star">✨</span>
+      <span class="ending-star">⭐</span>
+    </div>
+
+    <div class="ending-title">CONGRATULATIONS</div>
+    <div class="ending-subtitle">— ALL CLEAR —</div>
+    <div class="ending-divider"></div>
+
+    <div class="ending-message">
+      🎊 すべての試練を乗り越えた 🎊<br>
+      あなたは真の勇者です
+    </div>
+
+    <div class="ending-password-reveal" id="endingChars"></div>
+
+    <div class="ending-btn-container">
+      <a class="ending-btn" href="https://youtu.be/IMSjriljRsU" target="_blank" rel="noopener">
+        🎬 おち
+      </a>
+    </div>
+
+    <div class="ending-bottom-text">ボタンを押してエンディングムービーへ</div>
+
+    <div class="ending-bottom-btns">
+      <button class="back-to-menu-from-ending" onclick="goToMenu()">🎮 ゲーム選択に戻る</button>
+      <button class="restart-btn" onclick="restart()">🔄 最初から</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOTAL = 6;
+const ANSWER = ['い','ひ','す','い','さ','ん'];
+
+const SECRET_PASSWORDS = [
+  { word:'ぷんにゃん', url:'https://youtu.be/hH7T_m2NBCM' },
+  { word:'こつぶ',     url:'https://youtu.be/Op_B5AxcSi8' },
+];
+
+const SECRET_LINKS = [
+  { id:'g1', name:'デブコン',   url:'https://youtu.be/pcTSONlx4Ac',  check:()=>clearedGames.includes(1) },
+  { id:'g2', name:'加藤',       url:'https://youtu.be/OsAHc-J34fw',  check:()=>clearedGames.includes(2) },
+  { id:'g3', name:'よっち',     url:'https://youtu.be/34ABYg_x0P4',  check:()=>clearedGames.includes(3) },
+  { id:'g4', name:'のぶちゃん', url:'https://youtu.be/p8A7NFxCDfE',  check:()=>clearedGames.includes(4) },
+  { id:'g5', name:'ミッキー',   url:'https://youtu.be/moFKe85KpRU',  check:()=>clearedGames.includes(5) },
+  { id:'g6', name:'千葉',       url:'https://youtu.be/Lrt9aMYMWcg',  check:()=>clearedGames.includes(6) },
+  { id:'m3', name:'ゆうき',     url:'https://youtu.be/nZq3cKuvAR0',  check:()=>clearedGames.length>=3, bonus:true },
+  { id:'m6', name:'やっちゃん', url:'https://youtu.be/ycTh6RvrNKA',  check:()=>clearedGames.length>=6, bonus:true },
+];
+
+let currentIndex = 0;
+let inputChars = Array(TOTAL).fill('');
+let clearedGames = JSON.parse(localStorage.getItem('clearedGames') || '[]');
+
+// ===== パーティクル =====
+(function(){
+  const c=document.getElementById('particles');
+  const colors=['#6c63ff','#4ecdc4','#ff6b9d','#ffd700','#00ceff','#b464ff'];
+  for(let i=0;i<30;i++){
+    const p=document.createElement('div');
+    p.className='particle';
+    const s=Math.random()*4+2;
+    p.style.width=s+'px'; p.style.height=s+'px';
+    p.style.left=Math.random()*100+'%';
+    p.style.background=colors[Math.floor(Math.random()*colors.length)];
+    p.style.animationDuration=(Math.random()*8+6)+'s';
+    p.style.animationDelay=(Math.random()*10)+'s';
+    c.appendChild(p);
+  }
+})();
+
+// ===== メッセージ =====
+function showMessage(text, type, duration){
+  duration = duration || 2000;
+  const m=document.getElementById('message');
+  m.textContent=text;
+  m.className='message '+type+' show';
+  setTimeout(()=>m.classList.remove('show'), duration);
+}
+
+// ===== 画面切り替え =====
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  if(id==='endingScreen'){
+    buildEndingChars();
+    createEndingEffects();
+  }
+}
+
+// ===== 文字入力 =====
+function updateCharBoxes(){
+  const boxes=document.querySelectorAll('.char-box');
+  boxes.forEach((box,i)=>{
+    box.textContent=inputChars[i];
+    box.classList.remove('active','filled','hint-revealed');
+    if(i===currentIndex && currentIndex<TOTAL) box.classList.add('active');
+    if(inputChars[i]) box.classList.add('filled');
+    if(clearedGames.includes(i+1)) box.classList.add('hint-revealed');
+  });
+}
+
+function inputChar(char){
+  if(currentIndex>=TOTAL) return;
+  inputChars[currentIndex]=char;
+  currentIndex=Math.min(currentIndex+1,TOTAL);
+  updateCharBoxes();
+}
+
+function backspace(){
+  if(currentIndex>0){
+    currentIndex--;
+    inputChars[currentIndex]='';
+    updateCharBoxes();
+  }
+}
+
+function clearAll(){
+  currentIndex=0;
+  inputChars=Array(TOTAL).fill('');
+  updateCharBoxes();
+}
+
+function submit(){
+  const word=inputChars.join('');
+  if(word.length===0){
+    showMessage('文字を入力してください','error');
+    return;
+  }
+
+  // メインパスワード
+  if(word===ANSWER.join('')){
+    showMessage('🎉 正解！！おめでとう！！','success');
+    setTimeout(()=>showScreen('endingScreen'),800);
+    return;
+  }
+
+  // 秘密の合言葉
+  const secret=SECRET_PASSWORDS.find(p=>p.word===word);
+  if(secret){
+    showMessage('🎉 秘密の動画を発見！','success');
+    setTimeout(()=>window.open(secret.url,'_blank'),800);
+    setTimeout(()=>clearAll(),1200);
+    return;
+  }
+
+  // 不正解
+  showMessage('不正解… ゲームでヒントを集めよう','error');
+  document.getElementById('charBoxes').classList.add('shake');
+  setTimeout(()=>{
+    document.getElementById('charBoxes').classList.remove('shake');
+    clearAll();
+    goToMenu();
+  },1000);
+}
+
+// キーボード
+document.getElementById('keyboard').addEventListener('click',(e)=>{
+  const key=e.target.closest('.key');
+  if(!key) return;
+  if(key.dataset.char) inputChar(key.dataset.char);
+  else if(key.dataset.action==='backspace') backspace();
+  else if(key.dataset.action==='clear') clearAll();
+  else if(key.dataset.action==='submit') submit();
+});
+
+document.getElementById('charBoxes').addEventListener('click',(e)=>{
+  const box=e.target.closest('.char-box');
+  if(!box) return;
+  currentIndex=parseInt(box.dataset.index);
+  updateCharBoxes();
+});
+
+// ===== メニュー =====
+function goToMenu(){
+  updateMenu();
+  showScreen('menuScreen');
+}
+
+function goToInput(){
+  inputChars=Array(TOTAL).fill('');
+  clearedGames.forEach(gNum=>{
+    const idx=gNum-1;
+    if(idx>=0&&idx<TOTAL) inputChars[idx]=ANSWER[idx];
+  });
+  currentIndex=inputChars.findIndex(c=>c==='');
+  if(currentIndex===-1) currentIndex=TOTAL;
+  updateCharBoxes();
+  showScreen('inputScreen');
+}
+
+function updateMenu(){
+  document.querySelectorAll('.hint-char').forEach((el,i)=>{
+    if(clearedGames.includes(i+1)){
+      el.textContent=ANSWER[i]; el.classList.add('revealed');
+    } else {
+      el.textContent='？'; el.classList.remove('revealed');
+    }
+  });
+  document.querySelectorAll('.game-card').forEach(card=>{
+    const gNum=parseInt(card.dataset.game);
+    const status=document.getElementById('status'+gNum);
+    if(clearedGames.includes(gNum)){
+      status.textContent='クリア済 ✓';
+      status.className='game-status cleared';
+    } else {
+      status.textContent='挑戦する';
+      status.className='game-status not-cleared';
+    }
+  });
+}
+
+// ===== 秘密の部屋 =====
+function goToSecretRoom(){
+  updateSecretRoom();
+  showScreen('secretRoomScreen');
+  checkAndNotifyUnlocks();
+}
+
+function updateSecretRoom(){
+  const container=document.getElementById('secretLinks');
+  container.innerHTML='';
+
+  let count=0;
+  SECRET_LINKS.forEach((link,i)=>{
+    if(link.check()){
+      count++;
+      const a=document.createElement('a');
+      a.className='secret-link-card'+(link.bonus?' bonus':'');
+      a.href=link.url;
+      a.target='_blank';
+      a.rel='noopener';
+      a.style.animationDelay=(i*0.08)+'s';
+      a.innerHTML=
+        '<div class="secret-link-icon">'+(link.bonus?'🌟':'🎬')+'</div>'+
+        '<div class="secret-link-name">'+link.name+'</div>'+
+        '<div class="secret-link-arrow">▶</div>';
+      container.appendChild(a);
+    }
+  });
+
+  if(count===0){
+    const emptyDiv=document.createElement('div');
+    emptyDiv.className='secret-empty';
+    emptyDiv.textContent='…';
+    container.appendChild(emptyDiv);
+  }
+}
+
+function checkAndNotifyUnlocks(){
+  let notified=JSON.parse(localStorage.getItem('notifiedUnlocks')||'[]');
+  let newUnlocks=[];
+
+  SECRET_LINKS.forEach(link=>{
+    if(link.check()&&!notified.includes(link.id)){
+      newUnlocks.push(link);
+      notified.push(link.id);
+    }
+  });
+
+  newUnlocks.forEach((link,i)=>{
+    setTimeout(()=>{
+      showMessage('🔓 '+link.name+' アンロックされました！','unlock',2500);
+    }, i*3000+500);
+  });
+
+  localStorage.setItem('notifiedUnlocks',JSON.stringify(notified));
+}
+
+// ===== エンディング =====
+function buildEndingChars(){
+  const container=document.getElementById('endingChars');
+  container.innerHTML='';
+  ANSWER.forEach((char,i)=>{
+    const div=document.createElement('div');
+    div.className='ending-char';
+    div.textContent=char;
+    div.style.animationDelay=(i*0.15)+'s';
+    container.appendChild(div);
+  });
+}
+
+function createEndingEffects(){
+  const fw=document.getElementById('endingFireworks');
+  fw.innerHTML='';
+  const fwColors=['#ffd700','#ff6b9d','#6c63ff','#4ecdc4','#ff4500','#00ff88','#ff00ff','#00ceff'];
+  for(let i=0;i<12;i++){
+    const f=document.createElement('div');
+    f.className='firework';
+    f.style.left=(10+Math.random()*80)+'%';
+    f.style.top=(10+Math.random()*60)+'%';
+    f.style.color=fwColors[Math.floor(Math.random()*fwColors.length)];
+    f.style.animationDelay=(Math.random()*3)+'s';
+    f.style.animationDuration=(1.5+Math.random()*1.5)+'s';
+    fw.appendChild(f);
+  }
+  const cc=document.getElementById('confettiContainer');
+  cc.innerHTML='';
+  const cColors=['#ffd700','#ff6b9d','#6c63ff','#4ecdc4','#ff4500','#00ff88','#b464ff','#00ceff','#fff'];
+  for(let i=0;i<50;i++){
+    const c=document.createElement('div');
+    c.className='confetti';
+    c.style.left=Math.random()*100+'%';
+    c.style.width=(6+Math.random()*8)+'px';
+    c.style.height=(8+Math.random()*10)+'px';
+    c.style.background=cColors[Math.floor(Math.random()*cColors.length)];
+    c.style.animationDuration=(3+Math.random()*4)+'s';
+    c.style.animationDelay=(Math.random()*5)+'s';
+    c.style.borderRadius=Math.random()>0.5?'50%':'2px';
+    cc.appendChild(c);
+  }
+}
+
+// ===== ゲームクリア確認 =====
+function checkGameClears(){
+  for(let i=1;i<=TOTAL;i++){
+    if(localStorage.getItem('gameClear_'+i)==='true'){
+      if(!clearedGames.includes(i)) clearedGames.push(i);
+    }
+  }
+  clearedGames.sort((a,b)=>a-b);
+  localStorage.setItem('clearedGames',JSON.stringify(clearedGames));
+}
+
+// ===== リスタート（クリア状況は保持） =====
+function restart(){
+  // クリア状況と通知状況は保持する
+  const savedClears = {};
+  for(let i=1;i<=TOTAL;i++){
+    if(localStorage.getItem('gameClear_'+i)==='true'){
+      savedClears['gameClear_'+i] = 'true';
+    }
+  }
+  const savedClearedGames = localStorage.getItem('clearedGames');
+  const savedNotified = localStorage.getItem('notifiedUnlocks');
+
+  localStorage.clear();
+
+  // 復元
+  Object.keys(savedClears).forEach(k=>{
+    localStorage.setItem(k, savedClears[k]);
+  });
+  if(savedClearedGames) localStorage.setItem('clearedGames', savedClearedGames);
+  if(savedNotified) localStorage.setItem('notifiedUnlocks', savedNotified);
+
+  clearAll();
+  showScreen('inputScreen');
+}
+
+// ===== 初期化 =====
+(function init(){
+  checkGameClears();
+  const params=new URLSearchParams(window.location.search);
+  if(params.get('menu')==='1'){
+    goToMenu();
+    setTimeout(()=>{
+      let notified=JSON.parse(localStorage.getItem('notifiedUnlocks')||'[]');
+      let hasNew=SECRET_LINKS.some(l=>l.check()&&!notified.includes(l.id));
+      if(hasNew) checkAndNotifyUnlocks();
+    },600);
+  } else if(clearedGames.length>0){
+    goToInput();
+  } else {
+    updateCharBoxes();
+  }
+})();
+</script>
+
+</body>
+</html>

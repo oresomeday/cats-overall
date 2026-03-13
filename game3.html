@@ -1,0 +1,1889 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>オワタの大冒険風アクション</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: #000;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-family: 'MS Gothic', monospace;
+}
+canvas { display: block; image-rendering: pixelated; }
+#joystickArea {
+  position: fixed; bottom: 20px; left: 20px;
+  width: 140px; height: 140px; z-index: 10;
+}
+#joystickBase {
+  position: absolute; width: 140px; height: 140px;
+  border-radius: 50%; background: rgba(255,255,255,0.15);
+  border: 3px solid rgba(255,255,255,0.3);
+}
+#joystickKnob {
+  position: absolute; width: 60px; height: 60px;
+  border-radius: 50%; background: rgba(255,255,255,0.4);
+  border: 2px solid rgba(255,255,255,0.6);
+  left: 40px; top: 40px;
+}
+.btn {
+  position: fixed; bottom: 30px; border-radius: 50%;
+  border: 3px solid rgba(255,255,255,0.5);
+  color: #fff; font-size: 12px; font-weight: bold;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.05s, background 0.05s;
+}
+#btnA { right: 30px; width: 80px; height: 80px; background: rgba(255,50,50,0.5); }
+#btnA.pressed { background: rgba(255,100,100,0.8); transform: scale(0.95); }
+#btnB { right: 120px; bottom: 70px; width: 60px; height: 60px; background: rgba(50,100,255,0.5); }
+#btnB.pressed { background: rgba(100,150,255,0.8); transform: scale(0.95); }
+#btnStart {
+  position: fixed; top: 10px; right: 10px;
+  width: 60px; height: 35px; border-radius: 5px;
+  background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.4);
+  color: #fff; font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10; cursor: pointer;
+}
+#btnRestart {
+  position: fixed; top: 10px; right: 80px;
+  width: 80px; height: 35px; border-radius: 5px;
+  background: rgba(255,100,100,0.3); border: 2px solid rgba(255,100,100,0.5);
+  color: #fff; font-size: 10px;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 10; cursor: pointer;
+}
+#pcControls {
+  position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+  background: rgba(0,0,0,0.7); color: #fff; padding: 8px 15px;
+  border-radius: 5px; font-size: 11px; z-index: 5;
+  display: none;
+}
+@media (min-width: 800px) {
+  #joystickArea, #btnA, #btnB { opacity: 0.3; }
+  #pcControls { display: block; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+<div id="joystickArea">
+  <div id="joystickBase"></div>
+  <div id="joystickKnob"></div>
+</div>
+<div id="btnA" class="btn">JUMP</div>
+<div id="btnB" class="btn">ATK</div>
+<div id="btnStart">RETRY</div>
+<div id="btnRestart">最初から</div>
+<div id="pcControls">PC: ←→移動 | ↑/Space:ジャンプ(2段可) | Z/X:攻撃 | R:リトライ | T:最初から</div>
+
+<script>
+// ★ ゲームクリア時の遷移先設定
+const gameNum = location.href.match(/game(\d+)/)?.[1] || '1';
+
+function gameClear() {
+  localStorage.setItem('gameClear_' + gameNum, 'true');
+  window.location.href = 'index.html?menu=1';
+}
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+const GRAVITY = 0.5;
+const TILE = 32;
+const PLAYER_W = 22;
+const PLAYER_H = 26;
+const MAX_JUMPS = 2;
+const JUMP_BUFFER_TIME = 12;
+const COYOTE_TIME = 8;
+
+const joystick = { x: 0, y: 0, active: false, touchId: null };
+const joystickArea = document.getElementById('joystickArea');
+const joystickKnob = document.getElementById('joystickKnob');
+const joystickBase = document.getElementById('joystickBase');
+
+function handleJoystickStart(e) {
+  e.preventDefault();
+  const touch = e.changedTouches[0];
+  joystick.touchId = touch.identifier;
+  joystick.active = true;
+  updateJoystick(touch);
+}
+function handleJoystickMove(e) {
+  e.preventDefault();
+  for (let t of e.changedTouches) {
+    if (t.identifier === joystick.touchId) updateJoystick(t);
+  }
+}
+function handleJoystickEnd(e) {
+  for (let t of e.changedTouches) {
+    if (t.identifier === joystick.touchId) {
+      joystick.active = false;
+      joystick.x = 0; joystick.y = 0;
+      joystick.touchId = null;
+      joystickKnob.style.left = '40px';
+      joystickKnob.style.top = '40px';
+    }
+  }
+}
+function updateJoystick(touch) {
+  const rect = joystickBase.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  let dx = touch.clientX - cx;
+  let dy = touch.clientY - cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const maxDist = 40;
+  if (dist > maxDist) { dx = dx / dist * maxDist; dy = dy / dist * maxDist; }
+  joystick.x = dx / maxDist;
+  joystick.y = dy / maxDist;
+  joystickKnob.style.left = (40 + dx) + 'px';
+  joystickKnob.style.top = (40 + dy) + 'px';
+}
+
+joystickArea.addEventListener('touchstart', handleJoystickStart, { passive: false });
+joystickArea.addEventListener('touchmove', handleJoystickMove, { passive: false });
+joystickArea.addEventListener('touchend', handleJoystickEnd);
+joystickArea.addEventListener('touchcancel', handleJoystickEnd);
+
+const buttons = { jump: false, jumpPressed: false, attack: false, attackPressed: false };
+const btnA = document.getElementById('btnA');
+const btnB = document.getElementById('btnB');
+const btnStart = document.getElementById('btnStart');
+const btnRestart = document.getElementById('btnRestart');
+
+btnA.addEventListener('touchstart', (e) => { 
+  e.preventDefault(); 
+  buttons.jump = true; 
+  buttons.jumpPressed = true;
+  btnA.classList.add('pressed');
+}, { passive: false });
+btnA.addEventListener('touchend', (e) => { 
+  e.preventDefault();
+  buttons.jump = false; 
+  btnA.classList.remove('pressed');
+});
+btnA.addEventListener('touchcancel', () => { 
+  buttons.jump = false; 
+  btnA.classList.remove('pressed');
+});
+btnA.addEventListener('mousedown', (e) => { 
+  e.preventDefault(); 
+  buttons.jump = true; 
+  buttons.jumpPressed = true;
+  btnA.classList.add('pressed');
+});
+btnA.addEventListener('mouseup', () => { 
+  buttons.jump = false; 
+  btnA.classList.remove('pressed');
+});
+btnA.addEventListener('mouseleave', () => { 
+  buttons.jump = false; 
+  btnA.classList.remove('pressed');
+});
+
+btnB.addEventListener('touchstart', (e) => { 
+  e.preventDefault(); 
+  buttons.attack = true;
+  buttons.attackPressed = true;
+  btnB.classList.add('pressed');
+}, { passive: false });
+btnB.addEventListener('touchend', (e) => { 
+  e.preventDefault();
+  buttons.attack = false;
+  btnB.classList.remove('pressed');
+});
+btnB.addEventListener('touchcancel', () => { 
+  buttons.attack = false;
+  btnB.classList.remove('pressed');
+});
+btnB.addEventListener('mousedown', (e) => { 
+  e.preventDefault(); 
+  buttons.attack = true;
+  buttons.attackPressed = true;
+  btnB.classList.add('pressed');
+});
+btnB.addEventListener('mouseup', () => { 
+  buttons.attack = false;
+  btnB.classList.remove('pressed');
+});
+btnB.addEventListener('mouseleave', () => { 
+  buttons.attack = false;
+  btnB.classList.remove('pressed');
+});
+
+// ★ RETRY = チェックポイントから再開
+btnStart.addEventListener('touchstart', (e) => { e.preventDefault(); retryFromCheckpoint(); }, { passive: false });
+btnStart.addEventListener('click', () => retryFromCheckpoint());
+
+// ★ 最初から = ステージの最初から
+btnRestart.addEventListener('touchstart', (e) => { e.preventDefault(); restartLevel(); }, { passive: false });
+btnRestart.addEventListener('click', () => restartLevel());
+
+const keys = {};
+const keyPressed = {};
+
+document.addEventListener('keydown', (e) => {
+  if (!keys[e.code]) keyPressed[e.code] = true;
+  keys[e.code] = true;
+  if (e.key) keys[e.key.toLowerCase()] = true;
+  if (e.code === 'KeyR') retryFromCheckpoint(); // R = チェックポイントから
+  if (e.code === 'KeyT') restartLevel(); // T = 最初から
+  if (e.code === 'Space' || e.code === 'ArrowUp') e.preventDefault();
+});
+document.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+  if (e.key) keys[e.key.toLowerCase()] = false;
+});
+
+const LEVELS = [];
+
+// Level 1
+LEVELS[0] = {
+  name: "STAGE 1: チュートリアル地獄",
+  width: 100, height: 18,
+  startX: 2, startY: 15,
+  build: function() {
+    const m = [];
+    for (let y = 0; y < this.height; y++) {
+      m[y] = [];
+      for (let x = 0; x < this.width; x++) {
+        m[y][x] = (y === this.height - 1) ? 1 : 0;
+      }
+    }
+    
+    for (let x = 0; x < 12; x++) m[17][x] = 1;
+    for (let x = 12; x < 15; x++) { m[17][x] = 0; m[16][x] = 2; }
+    for (let x = 15; x < 25; x++) m[17][x] = 1;
+    m[16][18] = 12;
+    m[17][20] = 8; m[17][21] = 8;
+    for (let x = 25; x < 30; x++) m[17][x] = 2;
+    m[14][26] = 9; m[14][28] = 9;
+    for (let x = 30; x < 42; x++) m[17][x] = 6;
+    m[17][35] = 2; m[17][38] = 2;
+    for (let x = 42; x < 48; x++) m[17][x] = 1;
+    m[16][44] = 5;
+    m[10][50] = 1; m[10][51] = 1;
+    m[16][52] = 14; m[17][52] = 1;
+    for (let x = 48; x < 52; x++) m[17][x] = 7;
+    m[14][48] = 13; m[14][50] = 13;
+    for (let x = 52; x < 58; x++) m[17][x] = 11;
+    for (let x = 58; x < 64; x++) m[17][x] = 10;
+    m[17][63] = 2;
+    for (let x = 64; x < 70; x++) m[17][x] = 7;
+    for (let x = 65; x < 69; x++) for (let y = 10; y < 17; y++) m[y][x] = 22;
+    m[9][66] = 1; m[9][67] = 1;
+    for (let x = 70; x < 78; x++) m[17][x] = 1;
+    m[16][72] = 12;
+    m[15][75] = 15; m[10][85] = 16;
+    m[9][85] = 1; m[9][86] = 1;
+    for (let x = 78; x < 85; x++) m[17][x] = 1;
+    for (let x = 79; x < 84; x++) m[5][x] = 23;
+    for (let x = 85; x < 98; x++) m[17][x] = 1;
+    m[15][88] = 19; m[13][90] = 19; m[15][92] = 19;
+    m[17][90] = 2; m[17][94] = 2;
+    m[16][96] = 3;
+    
+    this.map = m;
+    this.enemies = [
+      { type: 'walker', x: 33 * TILE, y: 16 * TILE, dir: -1, speed: 2 },
+      { type: 'jumper', x: 55 * TILE, y: 15 * TILE, dir: 1, speed: 1.5, vy: 0, jumpTimer: 0 },
+      { type: 'shooter', x: 74 * TILE, y: 16 * TILE, dir: -1, shootTimer: 0, shootInterval: 60 },
+      { type: 'walker', x: 92 * TILE, y: 16 * TILE, dir: -1, speed: 2.5 },
+    ];
+    this.movingPlatforms = [
+      { x: 46 * TILE, y: 13 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1.2, range: 3 * TILE },
+    ];
+    this.crushers = [
+      { x: 79 * TILE, y: 0, w: 5 * TILE, h: 3 * TILE, baseY: 0, targetY: 14 * TILE, state: 'up', timer: 0 },
+    ];
+    this.lasers = [];
+    this.checkpoints = [{ x: 18, y: 16 }, { x: 72, y: 16 }];
+  }
+};
+
+// Level 2
+LEVELS[1] = {
+  name: "STAGE 2: 灼熱と氷の試練",
+  width: 120, height: 20,
+  startX: 2, startY: 17,
+  build: function() {
+    const m = [];
+    for (let y = 0; y < this.height; y++) {
+      m[y] = [];
+      for (let x = 0; x < this.width; x++) m[y][x] = 0;
+    }
+    
+    for (let x = 0; x < 10; x++) m[19][x] = 1;
+    m[18][5] = 12;
+    for (let x = 10; x < 50; x++) m[19][x] = 7;
+    m[17][12] = 1; m[17][13] = 1;
+    m[15][16] = 9; m[15][17] = 1;
+    m[17][20] = 13; m[17][21] = 13;
+    m[15][24] = 1;
+    m[17][27] = 14; m[18][27] = 1;
+    m[10][30] = 1; m[10][31] = 1;
+    m[12][34] = 1;
+    m[14][37] = 9; m[14][38] = 1;
+    m[16][41] = 1; m[16][42] = 1;
+    m[14][45] = 1;
+    m[16][48] = 1;
+    for (let x = 50; x < 75; x++) m[19][x] = 6;
+    m[18][55] = 12;
+    m[17][52] = 6; m[17][53] = 6;
+    m[15][56] = 6;
+    m[13][59] = 6; m[13][60] = 6;
+    m[11][63] = 6;
+    m[9][66] = 6; m[9][67] = 6;
+    m[19][58] = 2; m[19][62] = 2; m[19][66] = 2; m[19][70] = 2;
+    for (let x = 75; x < 95; x++) m[19][x] = 1;
+    for (let y = 5; y < 19; y++) { m[y][75] = 1; m[y][94] = 1; }
+    m[18][78] = 1; m[18][79] = 1;
+    m[14][81] = 1; m[14][82] = 1;
+    m[18][84] = 1; m[18][85] = 1;
+    m[10][87] = 1; m[10][88] = 1;
+    m[14][90] = 1; m[14][91] = 1;
+    m[18][92] = 1; m[18][93] = 1;
+    for (let x = 95; x < 110; x++) m[19][x] = 1;
+    m[18][97] = 12;
+    m[15][100] = 20; m[14][100] = 1;
+    for (let y = 14; y < 19; y++) m[y][105] = 21;
+    for (let x = 110; x < 120; x++) m[19][x] = 1;
+    m[17][112] = 19; m[15][114] = 19; m[13][116] = 19;
+    m[18][117] = 3;
+    
+    this.map = m;
+    this.lasers = [
+      { x: 76 * TILE, y: 16 * TILE, horizontal: true, length: 18 * TILE, on: true, timer: 0, interval: 90 },
+      { x: 76 * TILE, y: 12 * TILE, horizontal: true, length: 18 * TILE, on: false, timer: 45, interval: 90 },
+      { x: 76 * TILE, y: 8 * TILE, horizontal: true, length: 18 * TILE, on: true, timer: 0, interval: 90 },
+    ];
+    this.enemies = [
+      { type: 'flyer', x: 25 * TILE, y: 12 * TILE, dir: 1, speed: 1.5, originY: 12 * TILE, flyRange: 4 * TILE },
+      { type: 'flyer', x: 40 * TILE, y: 10 * TILE, dir: -1, speed: 2, originY: 10 * TILE, flyRange: 5 * TILE },
+      { type: 'walker', x: 60 * TILE, y: 18 * TILE, dir: -1, speed: 3 },
+      { type: 'shooter', x: 108 * TILE, y: 18 * TILE, dir: -1, shootTimer: 0, shootInterval: 45 },
+    ];
+    this.movingPlatforms = [
+      { x: 30 * TILE, y: 14 * TILE, w: 2 * TILE, h: 8, dx: 1, dy: 0, speed: 1.5, range: 4 * TILE },
+      { x: 43 * TILE, y: 15 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1, range: 4 * TILE },
+    ];
+    this.crushers = [];
+    this.checkpoints = [{ x: 5, y: 18 }, { x: 55, y: 18 }, { x: 97, y: 18 }];
+  }
+};
+
+// Level 3 - ボスHP調整済み
+LEVELS[2] = {
+  name: "FINAL STAGE: 絶望の城",
+  width: 150, height: 22,
+  startX: 2, startY: 19,
+  build: function() {
+    const m = [];
+    for (let y = 0; y < this.height; y++) {
+      m[y] = [];
+      for (let x = 0; x < this.width; x++) m[y][x] = 0;
+    }
+    
+    for (let x = 0; x < 8; x++) m[21][x] = 1;
+    m[20][4] = 12;
+    for (let x = 8; x < 40; x++) m[21][x] = 7;
+    m[19][10] = 1; m[19][11] = 1;
+    m[17][14] = 1; m[17][15] = 1;
+    m[15][18] = 1; m[15][19] = 1;
+    m[13][22] = 1; m[13][23] = 1;
+    m[11][26] = 1; m[11][27] = 1;
+    m[9][30] = 1; m[9][31] = 1;
+    m[7][34] = 14; m[8][34] = 1;
+    for (let y = 2; y < 21; y++) { m[y][37] = 22; m[y][38] = 22; }
+    m[21][37] = 7; m[21][38] = 7;
+    m[3][39] = 1; m[3][40] = 1; m[3][41] = 1;
+    for (let x = 40; x < 70; x++) m[21][x] = 1;
+    m[20][45] = 12;
+    for (let x = 65; x < 70; x++) m[21][x] = 11;
+    m[21][70] = 2;
+    for (let x = 70; x < 90; x++) m[21][x] = 1;
+    m[20][73] = 17;
+    for (let y = 15; y < 21; y++) m[y][80] = 18;
+    m[20][85] = 12;
+    for (let y = 12; y < 21; y++) { m[y][90] = 1; }
+    for (let y = 12; y < 21; y++) { m[y][99] = 1; }
+    m[20][92] = 1; m[20][93] = 1;
+    m[17][95] = 1; m[17][96] = 1;
+    m[14][92] = 1; m[14][93] = 1;
+    m[11][95] = 1; m[11][96] = 1; m[11][97] = 1;
+    for (let x = 100; x < 116; x++) m[11][x] = 6;
+    m[11][105] = 2; m[11][110] = 2;
+    for (let x = 116; x < 149; x++) m[21][x] = 1;
+    for (let y = 0; y < 8; y++) m[y][115] = 1;
+    for (let y = 14; y < 22; y++) m[y][115] = 1;
+    for (let y = 0; y < 22; y++) m[y][149] = 1;
+    for (let x = 115; x < 150; x++) m[0][x] = 1;
+    m[18][120] = 1; m[18][121] = 1;
+    m[15][125] = 1; m[15][126] = 1;
+    m[18][130] = 1; m[18][131] = 1;
+    m[15][135] = 1; m[15][136] = 1;
+    m[18][140] = 1; m[18][141] = 1;
+    m[20][147] = 3;
+    m[19][25] = 19; m[7][32] = 19; m[19][55] = 19;
+    m[19][75] = 19; m[10][95] = 19; m[10][108] = 19;
+    
+    this.map = m;
+    
+    this.crushers = [
+      { x: 48 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'up', timer: 0 },
+      { x: 54 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'down', timer: 45 },
+      { x: 60 * TILE, y: 0, w: 3 * TILE, h: 4 * TILE, baseY: 0, targetY: 17 * TILE, state: 'up', timer: 90 },
+    ];
+    
+    this.lasers = [
+      { x: 82 * TILE, y: 18 * TILE, horizontal: true, length: 7 * TILE, on: true, timer: 0, interval: 60 },
+    ];
+    
+    this.enemies = [
+      { type: 'flyer', x: 20 * TILE, y: 14 * TILE, dir: 1, speed: 2, originY: 14 * TILE, flyRange: 3 * TILE },
+      { type: 'walker', x: 50 * TILE, y: 20 * TILE, dir: -1, speed: 2 },
+      { type: 'shooter', x: 75 * TILE, y: 20 * TILE, dir: 1, shootTimer: 0, shootInterval: 50 },
+      // ★ ボスHP: 5に減少（元は12）
+      { type: 'boss', x: 132 * TILE, y: 17 * TILE, dir: -1, speed: 2.5, hp: 5, maxHp: 5, shootTimer: 0, shootInterval: 35, phase: 0 },
+    ];
+    
+    this.movingPlatforms = [
+      { x: 13 * TILE, y: 17 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1, range: 5 * TILE },
+      { x: 56 * TILE, y: 15 * TILE, w: 2 * TILE, h: 8, dx: 1, dy: 0, speed: 2, range: 3 * TILE },
+      { x: 122 * TILE, y: 12 * TILE, w: 3 * TILE, h: 8, dx: 1, dy: 0, speed: 1.5, range: 5 * TILE },
+      { x: 138 * TILE, y: 15 * TILE, w: 2 * TILE, h: 8, dx: 0, dy: 1, speed: 1.2, range: 4 * TILE },
+    ];
+    
+    this.checkpoints = [{ x: 4, y: 20 }, { x: 45, y: 20 }, { x: 85, y: 20 }];
+  }
+};
+
+// Game State
+let currentLevel = 0;
+let deaths = 0;
+let totalCoins = 0;
+let gameState = 'title';
+let deathTimer = 0;
+let clearTimer = 0;
+let screenShake = 0;
+let deathMessage = '';
+let hasKey = false;
+let switchActive = false;
+
+const DEATH_MESSAGES = [
+  '＼(^o^)／ｵﾜﾀ', '残念！', 'ドンマイ！', '( ´_ゝ`)ﾌｰﾝ', 'ｗｗｗ',
+  '(´;ω;`)', 'もう一回！', '無理ゲーw', 'ﾜﾛﾀ', '(^p^)',
+  'orz', '＞＜', 'うわああ', 'なんでや！', '理不尽！'
+];
+
+let player = {};
+let camera = { x: 0, y: 0 };
+let level = null;
+let enemies = [];
+let bullets = [];
+let playerBullets = [];
+let particles = [];
+let fallingPlatforms = [];
+let fakeTilesRemoved = [];
+let disappearTimers = {};
+let attackCooldown = 0;
+let lastCheckpoint = null;
+
+// ★ チェックポイントから再開（RETRY）
+function retryFromCheckpoint() {
+  // チェックポイントは維持したまま再開
+  loadLevel(currentLevel);
+  gameState = 'playing';
+}
+
+// ★ ステージの最初から
+function restartLevel() {
+  lastCheckpoint = null; // チェックポイントをリセット
+  loadLevel(currentLevel);
+  gameState = 'playing';
+}
+
+// ★ 全リセット（タイトルに戻る時やゲームクリア後）
+function resetGame() {
+  if (gameState === 'gameclear') {
+    // ★ ゲームクリア時はページ遷移
+    gameClear();
+    return;
+  }
+  currentLevel = 0;
+  deaths = 0;
+  totalCoins = 0;
+  lastCheckpoint = null;
+  loadLevel(currentLevel);
+  gameState = 'playing';
+}
+
+function loadLevel(idx) {
+  if (idx >= LEVELS.length) {
+    gameState = 'gameclear';
+    return;
+  }
+  level = LEVELS[idx];
+  level.build();
+  
+  // ★ チェックポイントがあればそこから、なければ最初から
+  const spawnX = lastCheckpoint ? lastCheckpoint.x : level.startX;
+  const spawnY = lastCheckpoint ? lastCheckpoint.y : level.startY;
+  
+  player = {
+    x: spawnX * TILE, y: spawnY * TILE,
+    vx: 0, vy: 0, w: PLAYER_W, h: PLAYER_H,
+    onGround: false, onIce: false, facing: 1,
+    alive: true, frame: 0, animTimer: 0, invincible: 0,
+    jumpCount: 0, maxJumps: MAX_JUMPS,
+    coyoteTimer: 0, jumpBufferTimer: 0, wasOnGround: false,
+  };
+  
+  enemies = JSON.parse(JSON.stringify(level.enemies));
+  enemies.forEach(e => {
+    e.alive = true;
+    e.originX = e.x;
+    if (e.type === 'flyer') e.originY_start = e.originY;
+  });
+  
+  bullets = [];
+  playerBullets = [];
+  particles = [];
+  fallingPlatforms = [];
+  fakeTilesRemoved = [];
+  disappearTimers = {};
+  attackCooldown = 0;
+  hasKey = false;
+  switchActive = false;
+  camera = { x: 0, y: 0 };
+  gameState = 'playing';
+}
+
+function getTile(x, y) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (!level || !level.map) return 1;
+  if (ty < 0) return 0;
+  if (ty >= level.height || tx < 0 || tx >= level.width) return 1;
+  
+  for (let f of fakeTilesRemoved) {
+    if (f.x === tx && f.y === ty) return 0;
+  }
+  for (let f of fallingPlatforms) {
+    if (f.tx === tx && f.ty === ty && f.fallen) return 0;
+  }
+  
+  const tile = level.map[ty][tx];
+  if (tile === 18 && switchActive) return 0;
+  if (tile === 21 && hasKey) return 0;
+  
+  return tile;
+}
+
+function setTile(x, y, val) {
+  const tx = Math.floor(x / TILE);
+  const ty = Math.floor(y / TILE);
+  if (level && level.map && ty >= 0 && ty < level.height && tx >= 0 && tx < level.width) {
+    level.map[ty][tx] = val;
+  }
+}
+
+function isSolid(tile) {
+  return tile === 1 || tile === 4 || tile === 6 || tile === 10 || tile === 11 || tile === 14 || tile === 18 || tile === 21;
+}
+
+function isDeadly(tile) {
+  return tile === 2 || tile === 7;
+}
+
+function updatePlayer() {
+  if (!player.alive) return;
+
+  let inputX = 0;
+  let inputJump = false;
+  let inputJumpPressed = false;
+  let inputAttack = false;
+
+  if (joystick.active) {
+    inputX = joystick.x;
+    if (Math.abs(inputX) < 0.2) inputX = 0;
+  }
+  
+  if (keys['ArrowLeft'] || keys['a'] || keys['KeyA']) inputX = -1;
+  if (keys['ArrowRight'] || keys['d'] || keys['KeyD']) inputX = 1;
+  
+  const jumpKeys = keys['ArrowUp'] || keys['w'] || keys['KeyW'] || keys[' '] || keys['Space'];
+  inputJump = buttons.jump || jumpKeys;
+  
+  if (keyPressed['ArrowUp'] || keyPressed['KeyW'] || keyPressed['Space']) {
+    inputJumpPressed = true;
+  }
+  if (buttons.jumpPressed) {
+    inputJumpPressed = true;
+    buttons.jumpPressed = false;
+  }
+  
+  const attackKeys = keys['z'] || keys['x'] || keys['KeyZ'] || keys['KeyX'] || keys['Enter'];
+  inputAttack = buttons.attack || attackKeys;
+  
+  for (let k in keyPressed) keyPressed[k] = false;
+
+  const accel = player.onGround ? 1.0 : 0.6;
+  const friction = player.onIce ? 0.98 : (player.onGround ? 0.75 : 0.92);
+  const maxSpeed = 5;
+  
+  player.vx += inputX * accel;
+  player.vx *= friction;
+  if (Math.abs(player.vx) > maxSpeed) player.vx = Math.sign(player.vx) * maxSpeed;
+  if (Math.abs(player.vx) < 0.1 && !player.onIce) player.vx = 0;
+
+  if (inputX > 0) player.facing = 1;
+  if (inputX < 0) player.facing = -1;
+
+  const tileBelow = getTile(player.x + player.w / 2, player.y + player.h + 2);
+  if (tileBelow === 10) player.vx -= 0.3;
+  if (tileBelow === 11) player.vx += 0.3;
+
+  const tileMid = getTile(player.x + player.w / 2, player.y + player.h / 2);
+  if (tileMid === 22) {
+    player.vy -= 0.9;
+    if (player.vy < -7) player.vy = -7;
+  }
+
+  if (player.onGround) {
+    player.coyoteTimer = COYOTE_TIME;
+    player.jumpCount = 0;
+  } else {
+    if (player.coyoteTimer > 0) player.coyoteTimer--;
+  }
+  
+  if (inputJumpPressed) {
+    player.jumpBufferTimer = JUMP_BUFFER_TIME;
+  } else if (player.jumpBufferTimer > 0) {
+    player.jumpBufferTimer--;
+  }
+
+  const canFirstJump = player.onGround || player.coyoteTimer > 0;
+  const canDoubleJump = !canFirstJump && player.jumpCount < player.maxJumps;
+  const wantsToJump = player.jumpBufferTimer > 0 || inputJumpPressed;
+  
+  if (wantsToJump) {
+    if (canFirstJump && player.jumpCount === 0) {
+      player.vy = -12;
+      player.onGround = false;
+      player.jumpCount = 1;
+      player.coyoteTimer = 0;
+      player.jumpBufferTimer = 0;
+      spawnParticles(player.x + player.w / 2, player.y + player.h, 8, '#fff', 3);
+    } else if (canDoubleJump) {
+      player.vy = -11;
+      player.jumpCount = 2;
+      player.jumpBufferTimer = 0;
+      spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 10, '#88ffff', 3);
+      for (let i = 0; i < 2; i++) {
+        particles.push({
+          x: player.x + player.w / 2,
+          y: player.y + player.h,
+          vx: (i === 0 ? -3 : 3),
+          vy: 1,
+          life: 15,
+          color: '#88ffff',
+          size: 8,
+          type: 'ring'
+        });
+      }
+    }
+  }
+  
+  if (!inputJump && player.vy < -5) {
+    player.vy = -5;
+  }
+
+  if (inputAttack && attackCooldown <= 0) {
+    attackCooldown = 10;
+    playerBullets.push({
+      x: player.x + player.w / 2 + player.facing * 12,
+      y: player.y + player.h / 2 - 2,
+      vx: player.facing * 12, vy: 0, life: 22
+    });
+    spawnParticles(player.x + player.w / 2 + player.facing * 15, player.y + player.h / 2, 4, '#FFD700', 3);
+  }
+  if (attackCooldown > 0) attackCooldown--;
+
+  player.vy += GRAVITY;
+  if (player.vy > 14) player.vy = 14;
+
+  player.wasOnGround = player.onGround;
+  player.x += player.vx;
+  resolveCollisionX();
+  player.y += player.vy;
+  player.onGround = false;
+  player.onIce = false;
+  resolveCollisionY();
+
+  for (let mp of level.movingPlatforms) {
+    if (player.vy >= 0 &&
+        player.x + player.w > mp.x && player.x < mp.x + mp.w &&
+        player.y + player.h >= mp.y && player.y + player.h <= mp.y + mp.h + 10) {
+      player.y = mp.y - player.h;
+      player.vy = 0;
+      player.onGround = true;
+      player.jumpCount = 0;
+      if (mp.dx) player.x += mp.dx * mp.speed * (mp._dir || 1);
+      if (mp.dy) player.y += mp.dy * mp.speed * (mp._dir || 1) * 0.5;
+    }
+  }
+
+  if (level.crushers) {
+    for (let c of level.crushers) {
+      if (player.x + player.w > c.x && player.x < c.x + c.w &&
+          player.y + player.h > c.y && player.y < c.y + c.h) {
+        killPlayer();
+        return;
+      }
+    }
+  }
+
+  if (level.lasers) {
+    for (let l of level.lasers) {
+      if (!l.on) continue;
+      if (l.horizontal) {
+        if (player.y + player.h > l.y && player.y < l.y + 8 &&
+            player.x + player.w > l.x && player.x < l.x + l.length) {
+          killPlayer();
+          return;
+        }
+      } else {
+        if (player.x + player.w > l.x && player.x < l.x + 8 &&
+            player.y + player.h > l.y && player.y < l.y + l.length) {
+          killPlayer();
+          return;
+        }
+      }
+    }
+  }
+
+  checkTileEffects();
+  
+  if (player.y > level.height * TILE + 100) killPlayer();
+  if (player.x < 0) player.x = 0;
+
+  player.animTimer++;
+  if (Math.abs(player.vx) > 0.5) {
+    if (player.animTimer % 5 === 0) player.frame = (player.frame + 1) % 4;
+  } else {
+    player.frame = 0;
+  }
+
+  if (player.invincible > 0) player.invincible--;
+
+  for (let e of enemies) {
+    if (!e.alive) continue;
+    const ew = e.type === 'boss' ? 48 : 24;
+    const eh = e.type === 'boss' ? 48 : 24;
+    if (player.x + player.w > e.x && player.x < e.x + ew &&
+        player.y + player.h > e.y && player.y < e.y + eh) {
+      if (player.vy > 0 && player.y + player.h < e.y + eh / 2 && e.type !== 'boss') {
+        e.alive = false;
+        player.vy = -10;
+        player.jumpCount = 1;
+        spawnParticles(e.x + ew / 2, e.y + eh / 2, 15, '#FF0000', 4);
+        screenShake = 5;
+      } else if (player.invincible <= 0) {
+        killPlayer();
+      }
+    }
+  }
+
+  for (let b of bullets) {
+    if (player.x + player.w > b.x - 5 && player.x < b.x + 5 &&
+        player.y + player.h > b.y - 5 && player.y < b.y + 5) {
+      if (player.invincible <= 0) killPlayer();
+      b.life = 0;
+    }
+  }
+}
+
+function resolveCollisionX() {
+  const left = Math.floor(player.x / TILE);
+  const right = Math.floor((player.x + player.w - 1) / TILE);
+  const top = Math.floor(player.y / TILE);
+  const bottom = Math.floor((player.y + player.h - 1) / TILE);
+
+  for (let ty = top; ty <= bottom; ty++) {
+    for (let tx = left; tx <= right; tx++) {
+      const tile = getTile(tx * TILE, ty * TILE);
+      if (isSolid(tile)) {
+        if (player.vx > 0) {
+          player.x = tx * TILE - player.w;
+          player.vx = 0;
+        } else if (player.vx < 0) {
+          player.x = (tx + 1) * TILE;
+          player.vx = 0;
+        }
+      }
+    }
+  }
+}
+
+function resolveCollisionY() {
+  const left = Math.floor(player.x / TILE);
+  const right = Math.floor((player.x + player.w - 1) / TILE);
+  const top = Math.floor(player.y / TILE);
+  const bottom = Math.floor((player.y + player.h - 1) / TILE);
+
+  for (let ty = top; ty <= bottom; ty++) {
+    for (let tx = left; tx <= right; tx++) {
+      const tile = getTile(tx * TILE, ty * TILE);
+      if (isSolid(tile)) {
+        if (player.vy > 0) {
+          player.y = ty * TILE - player.h;
+          player.vy = 0;
+          player.onGround = true;
+          player.jumpCount = 0;
+          if (tile === 6) player.onIce = true;
+        } else if (player.vy < 0) {
+          player.y = (ty + 1) * TILE;
+          player.vy = 0;
+        }
+      }
+      
+      if (tile === 5 && player.vy > 0 && player.y + player.h >= ty * TILE) {
+        player.vy = -16;
+        player.onGround = false;
+        player.jumpCount = 0;
+        screenShake = 3;
+        spawnParticles(tx * TILE + TILE / 2, ty * TILE, 10, '#FF6600', 4);
+      }
+      
+      if (tile === 14 && player.vy > 0 && player.y + player.h >= ty * TILE) {
+        player.vy = -20;
+        player.onGround = false;
+        player.jumpCount = 0;
+        screenShake = 5;
+        spawnParticles(tx * TILE + TILE / 2, ty * TILE, 15, '#FF00FF', 5);
+      }
+      
+      if (tile === 9 && player.vy >= 0 && player.y + player.h >= ty * TILE && player.y + player.h <= ty * TILE + 10) {
+        player.y = ty * TILE - player.h;
+        player.vy = 0;
+        player.onGround = true;
+        player.jumpCount = 0;
+        if (!fallingPlatforms.find(f => f.tx === tx && f.ty === ty)) {
+          fallingPlatforms.push({ tx, ty, timer: 25, fallen: false });
+        }
+      }
+      
+      if (tile === 13 && player.vy >= 0 && player.y + player.h >= ty * TILE && player.y + player.h <= ty * TILE + 10) {
+        player.y = ty * TILE - player.h;
+        player.vy = 0;
+        player.onGround = true;
+        player.jumpCount = 0;
+      }
+    }
+  }
+}
+
+function checkTileEffects() {
+  const cx = player.x + player.w / 2;
+  const cy = player.y + player.h / 2;
+  const points = [
+    [player.x + 2, player.y + 2],
+    [player.x + player.w - 2, player.y + 2],
+    [player.x + 2, player.y + player.h - 2],
+    [player.x + player.w - 2, player.y + player.h - 2],
+    [cx, cy]
+  ];
+  
+  for (let [px, py] of points) {
+    const tx = Math.floor(px / TILE);
+    const ty = Math.floor(py / TILE);
+    const tile = getTile(px, py);
+    
+    if (isDeadly(tile)) { killPlayer(); return; }
+    
+    if (tile === 3) {
+      gameState = 'clear';
+      clearTimer = 120;
+      // ★ クリア時はチェックポイントリセット
+      lastCheckpoint = null;
+      return;
+    }
+    
+    if (tile === 8) {
+      if (!fakeTilesRemoved.find(f => f.x === tx && f.y === ty)) {
+        setTimeout(() => fakeTilesRemoved.push({ x: tx, y: ty }), 80);
+      }
+    }
+    
+    if (tile === 12) {
+      lastCheckpoint = { x: tx, y: ty - 1 };
+      level.map[ty][tx] = 0;
+      spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 20, '#00FF00', 4);
+      screenShake = 3;
+    }
+    
+    if (tile === 15) {
+      for (let py2 = 0; py2 < level.height; py2++) {
+        for (let px2 = 0; px2 < level.width; px2++) {
+          if (level.map[py2][px2] === 16) {
+            player.x = px2 * TILE;
+            player.y = py2 * TILE;
+            player.jumpCount = 0;
+            spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#AA00FF', 5);
+            screenShake = 8;
+            return;
+          }
+        }
+      }
+    }
+    
+    if (tile === 16) {
+      for (let py2 = 0; py2 < level.height; py2++) {
+        for (let px2 = 0; px2 < level.width; px2++) {
+          if (level.map[py2][px2] === 15) {
+            player.x = px2 * TILE;
+            player.y = py2 * TILE;
+            player.jumpCount = 0;
+            spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 20, '#AA00FF', 5);
+            screenShake = 8;
+            return;
+          }
+        }
+      }
+    }
+    
+    if (tile === 19) {
+      level.map[ty][tx] = 0;
+      totalCoins++;
+      spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 10, '#FFD700', 3);
+    }
+    
+    if (tile === 20) {
+      level.map[ty][tx] = 0;
+      hasKey = true;
+      spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 15, '#FFD700', 4);
+      screenShake = 5;
+    }
+    
+    if (tile === 17) {
+      if (!switchActive) {
+        switchActive = true;
+        level.map[ty][tx] = 0;
+        spawnParticles(tx * TILE + TILE / 2, ty * TILE + TILE / 2, 15, '#00FF00', 4);
+        screenShake = 5;
+      }
+    }
+  }
+}
+
+function spawnParticles(x, y, count, color, size) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 4;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2,
+      life: 25 + Math.random() * 25,
+      color, size: size * (0.5 + Math.random() * 0.5)
+    });
+  }
+}
+
+function killPlayer() {
+  if (!player.alive) return;
+  player.alive = false;
+  deaths++;
+  deathTimer = 60;
+  gameState = 'dead';
+  deathMessage = DEATH_MESSAGES[Math.floor(Math.random() * DEATH_MESSAGES.length)];
+  screenShake = 15;
+  spawnParticles(player.x + player.w / 2, player.y + player.h / 2, 30, '#fff', 4);
+}
+
+function updateEnemies() {
+  for (let e of enemies) {
+    if (!e.alive) continue;
+    
+    switch (e.type) {
+      case 'walker':
+        e.x += e.dir * e.speed;
+        const aheadX = e.x + (e.dir > 0 ? 28 : -4);
+        const tileAhead = getTile(aheadX, e.y + 12);
+        const tileBelow = getTile(e.x + 12, e.y + 28);
+        if (isSolid(tileAhead) || (!isSolid(tileBelow) && tileBelow !== 7)) e.dir *= -1;
+        break;
+        
+      case 'jumper':
+        e.x += e.dir * e.speed;
+        e.jumpTimer = (e.jumpTimer || 0) + 1;
+        if (e.jumpTimer % 50 === 0 && e.vy === 0) e.vy = -10;
+        e.vy = (e.vy || 0) + GRAVITY;
+        e.y += e.vy;
+        const jTile = getTile(e.x + 12, e.y + 26);
+        if (isSolid(jTile) && e.vy > 0) {
+          e.y = Math.floor((e.y + 26) / TILE) * TILE - 24;
+          e.vy = 0;
+        }
+        const jAhead = getTile(e.x + (e.dir > 0 ? 28 : -4), e.y + 12);
+        if (isSolid(jAhead)) e.dir *= -1;
+        break;
+        
+      case 'flyer':
+        e.x += e.dir * e.speed;
+        e._flyAngle = (e._flyAngle || 0) + 0.04;
+        e.y = e.originY_start + Math.sin(e._flyAngle) * e.flyRange;
+        if (e.x > e.originX + 80 || e.x < e.originX - 80) e.dir *= -1;
+        break;
+        
+      case 'shooter':
+        e.shootTimer = (e.shootTimer || 0) + 1;
+        if (e.shootTimer >= e.shootInterval) {
+          e.shootTimer = 0;
+          const dx = player.x - e.x;
+          const dy = player.y - e.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          bullets.push({ x: e.x + 12, y: e.y + 12, vx: dx / dist * 5, vy: dy / dist * 5, life: 100 });
+        }
+        break;
+        
+      case 'boss':
+        e.x += e.dir * e.speed;
+        if (e.x < 118 * TILE || e.x > 144 * TILE) e.dir *= -1;
+        
+        e.shootTimer = (e.shootTimer || 0) + 1;
+        const bossInterval = e.hp < e.maxHp / 2 ? 25 : e.shootInterval;
+        
+        if (e.shootTimer >= bossInterval) {
+          e.shootTimer = 0;
+          const dx = player.x - e.x;
+          const dy = player.y - e.y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          
+          const pattern = Math.floor(Math.random() * 3);
+          if (pattern === 0) {
+            bullets.push({ x: e.x + 24, y: e.y + 24, vx: dx / dist * 6, vy: dy / dist * 6, life: 100 });
+          } else if (pattern === 1) {
+            for (let i = -1; i <= 1; i++) {
+              bullets.push({ x: e.x + 24, y: e.y + 24, vx: dx / dist * 5 + i * 2, vy: dy / dist * 5, life: 100 });
+            }
+          } else {
+            for (let a = 0; a < 8; a++) {
+              const angle = a * Math.PI / 4;
+              bullets.push({ x: e.x + 24, y: e.y + 24, vx: Math.cos(angle) * 4, vy: Math.sin(angle) * 4, life: 80 });
+            }
+          }
+        }
+        
+        if (e.hp < e.maxHp / 3 && e.phase === 0) {
+          e.phase = 1;
+          e.speed = 3.5;
+        }
+        break;
+    }
+  }
+
+  for (let pb of playerBullets) {
+    for (let e of enemies) {
+      if (!e.alive) continue;
+      const ew = e.type === 'boss' ? 48 : 24;
+      const eh = e.type === 'boss' ? 48 : 24;
+      if (pb.x > e.x && pb.x < e.x + ew && pb.y > e.y && pb.y < e.y + eh) {
+        pb.life = 0;
+        if (e.type === 'boss') {
+          e.hp--;
+          screenShake = 6;
+          spawnParticles(pb.x, pb.y, 8, '#FF4444', 3);
+          if (e.hp <= 0) {
+            e.alive = false;
+            spawnParticles(e.x + 24, e.y + 24, 40, '#FF0000', 5);
+            screenShake = 25;
+          }
+        } else {
+          e.alive = false;
+          spawnParticles(e.x + 12, e.y + 12, 12, '#FF0000', 3);
+          screenShake = 4;
+        }
+      }
+    }
+  }
+
+  bullets = bullets.filter(b => { b.x += b.vx; b.y += b.vy; b.life--; return b.life > 0; });
+  playerBullets = playerBullets.filter(b => {
+    b.x += b.vx; b.y += b.vy; b.life--;
+    const tile = getTile(b.x, b.y);
+    if (isSolid(tile)) {
+      if (tile === 4) {
+        setTile(b.x, b.y, 0);
+        spawnParticles(b.x, b.y, 10, '#8B4513', 3);
+      }
+      return false;
+    }
+    return b.life > 0;
+  });
+}
+
+function updateParticles() {
+  particles = particles.filter(p => {
+    p.x += p.vx; p.y += p.vy; 
+    if (p.type !== 'ring') p.vy += 0.12;
+    p.life--; 
+    if (p.type !== 'ring') p.size *= 0.96;
+    return p.life > 0;
+  });
+}
+
+function updateFallingPlatforms() {
+  for (let f of fallingPlatforms) {
+    if (!f.fallen) {
+      f.timer--;
+      if (f.timer <= 0) {
+        f.fallen = true;
+        spawnParticles(f.tx * TILE + TILE / 2, f.ty * TILE + TILE / 2, 8, '#888', 3);
+      }
+    }
+  }
+}
+
+function updateDisappearingPlatforms() {
+  if (!level || !level.map) return;
+  for (let ty = 0; ty < level.height; ty++) {
+    for (let tx = 0; tx < level.width; tx++) {
+      if (level.map[ty][tx] === 13) {
+        const key = `${tx},${ty}`;
+        if (!disappearTimers[key]) disappearTimers[key] = { phase: 'visible', timer: 90 + (tx * 13) % 60 };
+        const dt = disappearTimers[key];
+        dt.timer--;
+        if (dt.timer <= 0) {
+          dt.phase = dt.phase === 'visible' ? 'hidden' : 'visible';
+          dt.timer = dt.phase === 'visible' ? 90 : 60;
+        }
+      }
+    }
+  }
+}
+
+function updateMovingPlatforms() {
+  if (!level) return;
+  for (let mp of level.movingPlatforms) {
+    mp._angle = (mp._angle || 0) + 0.025;
+    mp._dir = Math.sin(mp._angle) > 0 ? 1 : -1;
+    if (mp.dx) mp.x = (mp.originX || mp.x) + Math.sin(mp._angle) * mp.range;
+    if (mp.dy) mp.y = (mp.originY || mp.y) + Math.sin(mp._angle) * mp.range;
+    if (!mp.originX) mp.originX = mp.x;
+    if (!mp.originY) mp.originY = mp.y;
+  }
+}
+
+function updateCrushers() {
+  if (!level || !level.crushers) return;
+  for (let c of level.crushers) {
+    if (c.state === 'up') {
+      c.timer++;
+      if (c.timer > 60) { c.state = 'falling'; c.timer = 0; }
+    } else if (c.state === 'falling') {
+      c.y += 14;
+      if (c.y >= c.targetY) { c.y = c.targetY; c.state = 'down'; c.timer = 0; screenShake = 8; }
+    } else if (c.state === 'down') {
+      c.timer++;
+      if (c.timer > 40) { c.state = 'rising'; c.timer = 0; }
+    } else if (c.state === 'rising') {
+      c.y -= 3;
+      if (c.y <= c.baseY) { c.y = c.baseY; c.state = 'up'; c.timer = 0; }
+    }
+  }
+}
+
+function updateLasers() {
+  if (!level || !level.lasers) return;
+  for (let l of level.lasers) {
+    l.timer++;
+    if (l.timer >= l.interval) { l.timer = 0; l.on = !l.on; }
+  }
+}
+
+function updateCamera() {
+  const targetX = player.x - canvas.width / 2 + player.w / 2;
+  const targetY = player.y - canvas.height / 2 + player.h / 2;
+  camera.x += (targetX - camera.x) * 0.1;
+  camera.y += (targetY - camera.y) * 0.1;
+  if (camera.x < 0) camera.x = 0;
+  if (camera.y < -100) camera.y = -100;
+  if (level) {
+    if (camera.x > level.width * TILE - canvas.width) camera.x = level.width * TILE - canvas.width;
+    if (camera.y > level.height * TILE - canvas.height + 100) camera.y = level.height * TILE - canvas.height + 100;
+  }
+}
+
+function drawGame() {
+  ctx.save();
+  
+  let shakeX = 0, shakeY = 0;
+  if (screenShake > 0) {
+    shakeX = (Math.random() - 0.5) * screenShake * 2;
+    shakeY = (Math.random() - 0.5) * screenShake * 2;
+    screenShake--;
+  }
+
+  const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  grad.addColorStop(0, '#0a0015');
+  grad.addColorStop(0.5, '#1a0a2e');
+  grad.addColorStop(1, '#0f2040');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  drawParallaxBG();
+
+  ctx.save();
+  ctx.translate(-camera.x + shakeX, -camera.y + shakeY);
+
+  drawTiles();
+  drawMovingPlatforms();
+  drawCrushers();
+  drawLasers();
+  drawEnemies();
+  drawBullets();
+  drawPlayerBullets();
+  if (player.alive) drawPlayer();
+  drawParticles();
+
+  ctx.restore();
+  drawUI();
+  ctx.restore();
+}
+
+function drawParallaxBG() {
+  ctx.fillStyle = '#ffffff06';
+  for (let i = 0; i < 80; i++) {
+    const x = ((i * 137 + 50) % canvas.width + canvas.width - camera.x * 0.05) % canvas.width;
+    const y = ((i * 97 + 30) % canvas.height - camera.y * 0.02 + canvas.height) % canvas.height;
+    ctx.fillRect(x, y, 1 + i % 2, 1 + i % 2);
+  }
+}
+
+function drawTiles() {
+  if (!level || !level.map) return;
+  const startX = Math.max(0, Math.floor(camera.x / TILE) - 1);
+  const endX = Math.min(level.width, Math.ceil((camera.x + canvas.width) / TILE) + 1);
+  const startY = Math.max(0, Math.floor(camera.y / TILE) - 1);
+  const endY = Math.min(level.height, Math.ceil((camera.y + canvas.height) / TILE) + 1);
+
+  for (let ty = startY; ty < endY; ty++) {
+    for (let tx = startX; tx < endX; tx++) {
+      const tile = getTile(tx * TILE, ty * TILE);
+      const x = tx * TILE, y = ty * TILE;
+
+      switch (tile) {
+        case 1:
+          ctx.fillStyle = '#4a3728';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#5c4a3a';
+          ctx.fillRect(x + 2, y + 2, TILE - 4, 4);
+          ctx.fillStyle = '#3a2718';
+          ctx.fillRect(x, y + TILE - 2, TILE, 2);
+          break;
+        case 2:
+          ctx.fillStyle = '#cc3333';
+          ctx.beginPath();
+          ctx.moveTo(x, y + TILE); ctx.lineTo(x + TILE / 2, y + 4); ctx.lineTo(x + TILE, y + TILE);
+          ctx.fill();
+          ctx.fillStyle = '#ff5555';
+          ctx.beginPath();
+          ctx.moveTo(x + 4, y + TILE); ctx.lineTo(x + TILE / 2, y + 8); ctx.lineTo(x + TILE - 4, y + TILE);
+          ctx.fill();
+          break;
+        case 3:
+          const ft = Date.now() * 0.005;
+          ctx.fillStyle = '#FFD700';
+          ctx.fillRect(x + 14, y, 4, TILE);
+          ctx.fillStyle = `hsl(${(ft * 50) % 360}, 100%, 50%)`;
+          ctx.fillRect(x + 18, y + 2, 12, 10);
+          ctx.font = '9px monospace';
+          ctx.fillStyle = '#FFD700';
+          ctx.fillText('GOAL', x + 2, y - 3);
+          break;
+        case 4:
+          ctx.fillStyle = '#8B7355';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.strokeStyle = '#6B5340';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(x, y); ctx.lineTo(x + TILE, y + TILE);
+          ctx.moveTo(x + TILE, y); ctx.lineTo(x, y + TILE);
+          ctx.stroke();
+          break;
+        case 5:
+          ctx.fillStyle = '#666';
+          ctx.fillRect(x + 4, y + TILE - 8, TILE - 8, 8);
+          ctx.fillStyle = '#FF6600';
+          ctx.fillRect(x + 6, y + TILE - 14, TILE - 12, 6);
+          break;
+        case 6:
+          ctx.fillStyle = '#aaddff';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#cceeFF';
+          ctx.fillRect(x + 2, y + 2, TILE - 4, 4);
+          ctx.fillStyle = '#ffffff44';
+          ctx.fillRect(x + 6, y + 10, 8, 4);
+          break;
+        case 7:
+          const lt = Date.now() * 0.003;
+          ctx.fillStyle = '#cc2200';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#ff4400';
+          ctx.fillRect(x, y, TILE, 4 + Math.sin(lt + tx) * 3);
+          ctx.fillStyle = '#ffaa00';
+          ctx.fillRect(x + 4, y, 8, 2 + Math.sin(lt + tx * 2) * 2);
+          break;
+        case 8:
+          ctx.fillStyle = '#4a3728';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#5c4a3a';
+          ctx.fillRect(x + 2, y + 2, TILE - 4, 4);
+          break;
+        case 9:
+          let shaking = fallingPlatforms.find(f => f.tx === tx && f.ty === ty && !f.fallen && f.timer < 15);
+          const ox = shaking ? (Math.random() - 0.5) * 4 : 0;
+          ctx.fillStyle = '#887755';
+          ctx.fillRect(x + ox, y, TILE, TILE);
+          ctx.strokeStyle = '#665533';
+          ctx.strokeRect(x + ox, y, TILE, TILE);
+          break;
+        case 10:
+          ctx.fillStyle = '#555';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#777';
+          const cl = (Date.now() / 50) % TILE;
+          for (let i = 0; i < 4; i++) ctx.fillRect(x + ((i * 8 - cl + TILE) % TILE), y + 12, 4, 8);
+          ctx.fillStyle = '#ff0';
+          ctx.fillText('←', x + 10, y + 12);
+          break;
+        case 11:
+          ctx.fillStyle = '#555';
+          ctx.fillRect(x, y, TILE, TILE);
+          ctx.fillStyle = '#777';
+          const cr = (Date.now() / 50) % TILE;
+          for (let i = 0; i < 4; i++) ctx.fillRect(x + ((i * 8 + cr) % TILE), y + 12, 4, 8);
+          ctx.fillStyle = '#ff0';
+          ctx.fillText('→', x + 10, y + 12);
+          break;
+        case 12:
+          ctx.fillStyle = '#00ff00';
+          ctx.fillRect(x + 14, y + 4, 4, TILE - 4);
+          ctx.fillStyle = '#88ff88';
+          ctx.beginPath();
+          ctx.moveTo(x + 18, y + 4); ctx.lineTo(x + 28, y + 10); ctx.lineTo(x + 18, y + 16);
+          ctx.fill();
+          break;
+        case 13:
+          const dk = `${tx},${ty}`;
+          const vis = !disappearTimers[dk] || disappearTimers[dk].phase === 'visible';
+          if (vis) {
+            const alpha = disappearTimers[dk] && disappearTimers[dk].timer < 20 ? 0.5 : 1;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = '#8866aa';
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.fillStyle = '#aa88cc';
+            ctx.fillRect(x + 2, y + 2, TILE - 4, TILE - 4);
+            ctx.globalAlpha = 1;
+          }
+          break;
+        case 14:
+          ctx.fillStyle = '#ff00ff';
+          ctx.fillRect(x + 2, y + TILE - 10, TILE - 4, 10);
+          ctx.fillStyle = '#ff88ff';
+          ctx.fillRect(x + 4, y + TILE - 8, TILE - 8, 4);
+          break;
+        case 15:
+        case 16:
+          const pc = tile === 15 ? '#00ffff' : '#ff00ff';
+          const pt = Date.now() * 0.01;
+          ctx.fillStyle = pc;
+          ctx.beginPath();
+          ctx.ellipse(x + TILE / 2, y + TILE / 2, 12 + Math.sin(pt) * 2, 14 + Math.cos(pt) * 2, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#000';
+          ctx.beginPath();
+          ctx.ellipse(x + TILE / 2, y + TILE / 2, 6, 8, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case 17:
+          ctx.fillStyle = '#888';
+          ctx.fillRect(x + 8, y + 16, 16, 16);
+          ctx.fillStyle = '#ff0';
+          ctx.beginPath();
+          ctx.arc(x + 16, y + 12, 8, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case 18:
+          if (!switchActive) {
+            ctx.fillStyle = '#884400';
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.fillStyle = '#aa6622';
+            ctx.fillRect(x + 4, y + 4, TILE - 8, TILE - 8);
+          }
+          break;
+        case 19:
+          const ct = Date.now() * 0.005;
+          ctx.fillStyle = '#FFD700';
+          ctx.beginPath();
+          ctx.ellipse(x + TILE / 2, y + TILE / 2 + Math.sin(ct + tx) * 3, 10, 10, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFA500';
+          ctx.beginPath();
+          ctx.ellipse(x + TILE / 2, y + TILE / 2 + Math.sin(ct + tx) * 3, 6, 6, 0, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case 20:
+          ctx.fillStyle = '#FFD700';
+          ctx.fillRect(x + 10, y + 6, 12, 8);
+          ctx.fillRect(x + 14, y + 14, 4, 12);
+          ctx.fillRect(x + 10, y + 20, 4, 4);
+          break;
+        case 21:
+          if (!hasKey) {
+            ctx.fillStyle = '#666';
+            ctx.fillRect(x, y, TILE, TILE);
+            ctx.fillStyle = '#888';
+            ctx.fillRect(x + 8, y + 8, 16, 16);
+            ctx.fillStyle = '#FFD700';
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          break;
+        case 22:
+          ctx.fillStyle = 'rgba(150, 200, 255, 0.2)';
+          ctx.fillRect(x, y, TILE, TILE);
+          const wt = Date.now() * 0.01;
+          ctx.strokeStyle = 'rgba(200, 230, 255, 0.4)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 3; i++) {
+            const wy = ((wt * 30 + i * 12 + ty * 5) % TILE);
+            ctx.beginPath();
+            ctx.moveTo(x + 4 + i * 10, y + TILE - wy);
+            ctx.lineTo(x + 4 + i * 10, y + TILE - wy - 8);
+            ctx.stroke();
+          }
+          break;
+      }
+    }
+  }
+}
+
+function drawMovingPlatforms() {
+  if (!level) return;
+  for (let mp of level.movingPlatforms) {
+    ctx.fillStyle = '#6688aa';
+    ctx.fillRect(mp.x, mp.y, mp.w, mp.h);
+    ctx.fillStyle = '#88aacc';
+    ctx.fillRect(mp.x + 2, mp.y + 2, mp.w - 4, mp.h / 2);
+  }
+}
+
+function drawCrushers() {
+  if (!level || !level.crushers) return;
+  for (let c of level.crushers) {
+    ctx.fillStyle = '#555';
+    ctx.fillRect(c.x, c.y, c.w, c.h);
+    ctx.fillStyle = '#777';
+    ctx.fillRect(c.x + 4, c.y + 4, c.w - 8, c.h - 8);
+    ctx.fillStyle = '#cc3333';
+    for (let i = 0; i < c.w / 16; i++) {
+      ctx.beginPath();
+      ctx.moveTo(c.x + i * 16, c.y + c.h);
+      ctx.lineTo(c.x + i * 16 + 8, c.y + c.h + 12);
+      ctx.lineTo(c.x + i * 16 + 16, c.y + c.h);
+      ctx.fill();
+    }
+  }
+}
+
+function drawLasers() {
+  if (!level || !level.lasers) return;
+  for (let l of level.lasers) {
+    if (!l.on) ctx.fillStyle = 'rgba(255, 0, 0, 0.2)';
+    else ctx.fillStyle = `rgba(255, ${50 + Math.sin(Date.now() * 0.02) * 50}, 0, 0.9)`;
+    if (l.horizontal) {
+      ctx.fillRect(l.x, l.y, l.length, l.on ? 8 : 2);
+      if (l.on) { ctx.fillStyle = '#ff8800'; ctx.fillRect(l.x, l.y + 2, l.length, 4); }
+    } else {
+      ctx.fillRect(l.x, l.y, l.on ? 8 : 2, l.length);
+      if (l.on) { ctx.fillStyle = '#ff8800'; ctx.fillRect(l.x + 2, l.y, 4, l.length); }
+    }
+    ctx.fillStyle = '#444';
+    if (l.horizontal) ctx.fillRect(l.x - 8, l.y - 4, 8, 16);
+    else ctx.fillRect(l.x - 4, l.y - 8, 16, 8);
+  }
+}
+
+function drawPlayer() {
+  if (player.invincible > 0 && player.invincible % 4 < 2) return;
+
+  ctx.save();
+  if (player.facing < 0) {
+    ctx.translate(player.x + player.w, player.y);
+    ctx.scale(-1, 1);
+  } else {
+    ctx.translate(player.x, player.y);
+  }
+
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(2, player.h - 2, player.w - 4, 4);
+
+  const isDoubleJumping = player.jumpCount >= 2 && !player.onGround;
+  
+  ctx.fillStyle = '#ffddaa';
+  ctx.fillRect(3, 0, 16, 12);
+  ctx.fillStyle = isDoubleJumping ? '#44aaff' : '#4444ff';
+  ctx.fillRect(3, 12, 16, 10);
+  ctx.fillStyle = '#333';
+  
+  if (!player.onGround) {
+    ctx.fillRect(3, 22, 7, 4);
+    ctx.fillRect(12, 20, 7, 4);
+    if (isDoubleJumping) {
+      ctx.fillStyle = 'rgba(136, 255, 255, 0.5)';
+      ctx.fillRect(0, player.h - 6, player.w, 4);
+    }
+  } else if (Math.abs(player.vx) > 0.5) {
+    const lo = Math.sin(player.animTimer * 0.4) * 2;
+    ctx.fillRect(3, 22 + lo, 7, 4);
+    ctx.fillRect(12, 22 - lo, 7, 4);
+  } else {
+    ctx.fillRect(3, 22, 7, 4);
+    ctx.fillRect(12, 22, 7, 4);
+  }
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(6, 3, 3, 3);
+  ctx.fillRect(13, 3, 3, 3);
+  ctx.fillRect(8, 8, 6, 2);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(3, 0, 16, 2);
+
+  ctx.restore();
+}
+
+function drawEnemies() {
+  for (let e of enemies) {
+    if (!e.alive) continue;
+
+    switch (e.type) {
+      case 'walker':
+        ctx.fillStyle = '#cc2222';
+        ctx.beginPath();
+        ctx.arc(e.x + 12, e.y + 16, 12, Math.PI, 0);
+        ctx.fillRect(e.x, e.y + 16, 24, 8);
+        ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(e.x + 5, e.y + 8, 4, 4);
+        ctx.fillRect(e.x + 15, e.y + 8, 4, 4);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(e.x + (e.dir > 0 ? 7 : 5), e.y + 9, 2, 3);
+        ctx.fillRect(e.x + (e.dir > 0 ? 17 : 15), e.y + 9, 2, 3);
+        break;
+      case 'jumper':
+        ctx.fillStyle = '#22aa22';
+        ctx.fillRect(e.x + 2, e.y + 2, 20, 18);
+        ctx.fillRect(e.x, e.y + 10, 24, 14);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(e.x + 4, e.y + 4, 5, 5);
+        ctx.fillRect(e.x + 15, e.y + 4, 5, 5);
+        break;
+      case 'flyer':
+        const fa = Date.now() * 0.015;
+        ctx.fillStyle = '#8822cc';
+        ctx.fillRect(e.x + 4, e.y + 6, 16, 12);
+        ctx.fillStyle = '#aa44ee';
+        const wy = Math.sin(fa) * 4;
+        ctx.fillRect(e.x - 6, e.y + 4 + wy, 10, 6);
+        ctx.fillRect(e.x + 20, e.y + 4 - wy, 10, 6);
+        ctx.fillStyle = '#ff0';
+        ctx.fillRect(e.x + 7, e.y + 8, 3, 3);
+        ctx.fillRect(e.x + 14, e.y + 8, 3, 3);
+        break;
+      case 'shooter':
+        ctx.fillStyle = '#666';
+        ctx.fillRect(e.x, e.y, 24, 24);
+        ctx.fillStyle = '#444';
+        ctx.fillRect(e.x + (e.dir > 0 ? 18 : -6), e.y + 8, 12, 8);
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(e.x + 9, e.y + 9, 6, 6);
+        break;
+      case 'boss':
+        const bf = e.hp < e.maxHp / 3 && Date.now() % 150 < 75 ? '#ff4444' : '#aa0000';
+        ctx.fillStyle = bf;
+        ctx.fillRect(e.x, e.y, 48, 48);
+        ctx.fillStyle = '#cc2222';
+        ctx.fillRect(e.x + 4, e.y + 4, 40, 40);
+        ctx.fillStyle = '#660000';
+        ctx.fillRect(e.x - 4, e.y - 10, 12, 14);
+        ctx.fillRect(e.x + 40, e.y - 10, 12, 14);
+        ctx.fillStyle = '#FFD700';
+        ctx.fillRect(e.x + 8, e.y + 12, 10, 10);
+        ctx.fillRect(e.x + 30, e.y + 12, 10, 10);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(e.x + 10, e.y + 14, 6, 8);
+        ctx.fillRect(e.x + 32, e.y + 14, 6, 8);
+        ctx.fillStyle = '#440000';
+        ctx.fillRect(e.x + 12, e.y + 32, 24, 10);
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < 6; i++) ctx.fillRect(e.x + 13 + i * 4, e.y + 32, 2, 5);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(e.x - 8, e.y - 22, 64, 8);
+        ctx.fillStyle = e.hp < e.maxHp / 3 ? '#ff0000' : '#00ff00';
+        ctx.fillRect(e.x - 8, e.y - 22, 64 * (e.hp / e.maxHp), 8);
+        ctx.strokeStyle = '#fff';
+        ctx.strokeRect(e.x - 8, e.y - 22, 64, 8);
+        break;
+    }
+  }
+}
+
+function drawBullets() {
+  for (let b of bullets) {
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffaaaa';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawPlayerBullets() {
+  for (let b of playerBullets) {
+    ctx.fillStyle = '#44aaff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#aaddff';
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawParticles() {
+  for (let p of particles) {
+    ctx.globalAlpha = Math.min(1, p.life / 20);
+    ctx.fillStyle = p.color;
+    if (p.type === 'ring') {
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * (1 - p.life / 15), 0, Math.PI * 2);
+      ctx.stroke();
+    } else {
+      ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawUI() {
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText(`💀 ${deaths}`, 10, 25);
+  ctx.fillText(`💰 ${totalCoins}`, 10, 45);
+  
+  ctx.fillStyle = player.jumpCount < 2 ? '#88ffff' : '#555';
+  ctx.fillText(`⬆️ ${player.maxJumps - player.jumpCount}`, 10, 65);
+  
+  if (hasKey) {
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('🔑 KEY', 10, 85);
+  }
+  
+  // チェックポイント表示
+  if (lastCheckpoint) {
+    ctx.fillStyle = '#00ff00';
+    ctx.fillText('✓ CP', 10, 105);
+  }
+
+  if (level) {
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 14px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(level.name, canvas.width / 2, 20);
+  }
+
+  if (gameState === 'dead') {
+    ctx.fillStyle = `rgba(255, 0, 0, ${Math.min(0.4, deathTimer / 60 * 0.4)})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 42px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = '#f00';
+    ctx.lineWidth = 3;
+    ctx.strokeText(deathMessage, canvas.width / 2, canvas.height / 2 - 20);
+    ctx.fillText(deathMessage, canvas.width / 2, canvas.height / 2 - 20);
+    ctx.font = '18px monospace';
+    ctx.fillStyle = '#ccc';
+    ctx.fillText(`死亡回数: ${deaths}`, canvas.width / 2, canvas.height / 2 + 20);
+    if (deathTimer <= 0) {
+      ctx.fillText('タップ/Enter/R → チェックポイントから', canvas.width / 2, canvas.height / 2 + 50);
+      ctx.fillText('T → ステージ最初から', canvas.width / 2, canvas.height / 2 + 75);
+    }
+  }
+
+  if (gameState === 'clear') {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 36px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('STAGE CLEAR!', canvas.width / 2, canvas.height / 2 - 30);
+    ctx.font = '20px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`死亡: ${deaths} | コイン: ${totalCoins}`, canvas.width / 2, canvas.height / 2 + 15);
+  }
+
+  if (gameState === 'title') {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 32px monospace';
+    ctx.fillStyle = '#ff4444';
+    ctx.fillText('＼(^o^)／', canvas.width / 2, canvas.height / 2 - 110);
+    ctx.font = 'bold 26px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('オワタ風アクション', canvas.width / 2, canvas.height / 2 - 65);
+    ctx.font = 'bold 16px monospace';
+    ctx.fillStyle = '#88ffff';
+    ctx.fillText('★ 2段ジャンプ対応！ ★', canvas.width / 2, canvas.height / 2 - 35);
+    
+    ctx.font = '14px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('【操作方法】', canvas.width / 2, canvas.height / 2 - 5);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('移動: ←→ / AD / スティック', canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText('ジャンプ: ↑/W/Space (空中でもう1回!)', canvas.width / 2, canvas.height / 2 + 40);
+    ctx.fillText('攻撃: Z / X / Bボタン', canvas.width / 2, canvas.height / 2 + 60);
+    ctx.fillText('R:チェックポイントから / T:最初から', canvas.width / 2, canvas.height / 2 + 80);
+
+    const blink = Math.sin(Date.now() * 0.006) > 0;
+    if (blink) {
+      ctx.fillStyle = '#FFD700';
+      ctx.font = 'bold 18px monospace';
+      ctx.fillText('タップ/Enterでスタート!', canvas.width / 2, canvas.height / 2 + 120);
+    }
+  }
+
+  // ★ ゲームクリア画面
+  if (gameState === 'gameclear') {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.textAlign = 'center';
+    const rainbow = `hsl(${Date.now() * 0.1 % 360}, 100%, 60%)`;
+    ctx.font = 'bold 42px monospace';
+    ctx.fillStyle = rainbow;
+    ctx.fillText('GAME CLEAR!', canvas.width / 2, canvas.height / 2 - 60);
+    ctx.font = 'bold 22px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(`総死亡回数: ${deaths}`, canvas.width / 2, canvas.height / 2 - 10);
+    ctx.fillText(`総コイン: ${totalCoins}`, canvas.width / 2, canvas.height / 2 + 20);
+    
+    let rank = deaths === 0 ? 'S+ (神)' : deaths < 5 ? 'S (達人)' : deaths < 15 ? 'A (上級者)' : deaths < 30 ? 'B (中級者)' : deaths < 60 ? 'C (頑張った)' : 'D (ドンマイ)';
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText(`ランク: ${rank}`, canvas.width / 2, canvas.height / 2 + 60);
+    ctx.font = '16px monospace';
+    ctx.fillStyle = '#aaa';
+    ctx.fillText('タップでメニューに戻る', canvas.width / 2, canvas.height / 2 + 100);
+  }
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  if (gameState === 'title') {
+    resetGame();
+  } else if (gameState === 'dead' && deathTimer <= 0) {
+    retryFromCheckpoint(); // ★ チェックポイントから再開
+  } else if (gameState === 'gameclear') {
+    gameClear(); // ★ メニューに遷移
+  }
+}, { passive: true });
+
+canvas.addEventListener('click', () => {
+  if (gameState === 'title') {
+    resetGame();
+  } else if (gameState === 'dead' && deathTimer <= 0) {
+    retryFromCheckpoint(); // ★ チェックポイントから再開
+  } else if (gameState === 'gameclear') {
+    gameClear(); // ★ メニューに遷移
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter' || e.code === 'Space') {
+    if (gameState === 'title') resetGame();
+    else if (gameState === 'dead' && deathTimer <= 0) retryFromCheckpoint();
+    else if (gameState === 'gameclear') gameClear();
+  }
+});
+
+function gameLoop() {
+  switch (gameState) {
+    case 'playing':
+      updatePlayer();
+      updateEnemies();
+      updateParticles();
+      updateFallingPlatforms();
+      updateDisappearingPlatforms();
+      updateMovingPlatforms();
+      updateCrushers();
+      updateLasers();
+      updateCamera();
+      break;
+    case 'dead':
+      deathTimer--;
+      updateParticles();
+      break;
+    case 'clear':
+      clearTimer--;
+      updateParticles();
+      if (clearTimer <= 0) {
+        currentLevel++;
+        lastCheckpoint = null; // 次ステージはチェックポイントリセット
+        if (currentLevel >= LEVELS.length) {
+          gameState = 'gameclear';
+        } else {
+          loadLevel(currentLevel);
+        }
+      }
+      break;
+  }
+  drawGame();
+  requestAnimationFrame(gameLoop);
+}
+
+gameState = 'title';
+loadLevel(0);
+gameState = 'title';
+gameLoop();
+</script>
+</body>
+</html>

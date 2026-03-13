@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Game</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;user-select:none}
+body{font-family:'Hiragino Sans','Meiryo',sans-serif;background:#0a0a1a;min-height:100vh;overflow:hidden;touch-action:manipulation}
+.back-btn{position:fixed;top:15px;left:15px;background:linear-gradient(180deg,#6c0000,#8b0000);border:2px solid #ff3030;color:#fff;width:50px;height:50px;border-radius:50%;font-size:1.5rem;cursor:pointer;z-index:9999;box-shadow:0 4px 15px rgba(139,0,0,.5);display:flex;align-items:center;justify-content:center}
+.back-btn:active{transform:scale(.9)}
+#game{width:100vw;height:100vh;max-width:500px;margin:0 auto;position:relative;overflow:hidden}
+.screen{display:none;width:100%;height:100%;flex-direction:column;align-items:center;justify-content:center;padding:15px;position:absolute;top:0;left:0}
+.screen.active{display:flex}
+#title{background:#000;position:relative;overflow:hidden}
+.bg-effects{position:absolute;inset:0;pointer-events:none}
+.cyber-grid{position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,255,255,.03) 1px,transparent 1px),linear-gradient(rgba(0,255,255,.03) 1px,transparent 1px);background-size:30px 30px;animation:gM 20s linear infinite}
+@keyframes gM{to{background-position:30px 30px}}
+.aurora{position:absolute;inset:0;background:radial-gradient(ellipse at 20% 20%,rgba(255,0,128,.3),transparent 50%),radial-gradient(ellipse at 80% 30%,rgba(0,255,255,.3),transparent 50%),radial-gradient(ellipse at 50% 80%,rgba(128,0,255,.3),transparent 50%);animation:aS 8s ease-in-out infinite}
+@keyframes aS{0%,100%{opacity:.8}50%{opacity:1}}
+.particles{position:absolute;inset:0;overflow:hidden}
+.particle{position:absolute;border-radius:50%;animation:fU 10s infinite;opacity:0}
+@keyframes fU{0%{transform:translateY(100vh) scale(0);opacity:0}10%{opacity:1}90%{opacity:1}100%{transform:translateY(-100vh) scale(1);opacity:0}}
+.scanlines{position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0px,transparent 2px,rgba(0,0,0,.1) 2px,rgba(0,0,0,.1) 4px)}
+.title-content{position:relative;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;padding:20px}
+.title-logo{text-align:center;margin-bottom:auto;padding-top:15vh}
+.title-icon{font-size:4.5em;display:block;margin-bottom:15px;animation:iF 3s ease-in-out infinite,iG 2s ease-in-out infinite alternate}
+@keyframes iF{0%,100%{transform:translateY(0)}50%{transform:translateY(-15px)}}
+@keyframes iG{from{filter:drop-shadow(0 0 30px rgba(255,0,255,.8))}to{filter:drop-shadow(0 0 50px rgba(0,255,255,.8))}}
+.title-text{font-size:2.2em;font-weight:900;text-transform:uppercase;letter-spacing:.1em;color:#fff;text-shadow:0 0 10px #fff,0 0 20px #fff,0 0 40px #ff00ff,0 0 80px #ff00ff;animation:tP 2s ease-in-out infinite}
+@keyframes tP{0%,100%{text-shadow:0 0 10px #fff,0 0 20px #fff,0 0 40px #ff00ff,0 0 80px #ff00ff}50%{text-shadow:0 0 20px #fff,0 0 40px #fff,0 0 60px #00ffff,0 0 100px #00ffff}}
+.title-sub{font-size:1em;color:#0ff;letter-spacing:.5em;margin-top:10px;text-shadow:0 0 20px #0ff}
+.start-btn-wrap{display:flex;align-items:center;justify-content:center}
+.start-btn{position:relative;background:transparent;border:none;padding:22px 70px;font-size:1.6em;font-weight:bold;color:#fff;cursor:pointer;text-transform:uppercase;letter-spacing:.1em;overflow:hidden}
+.start-btn::before{content:'';position:absolute;inset:0;background:linear-gradient(45deg,#ff0080,#ff00ff,#8000ff,#0080ff,#00ffff);background-size:400% 400%;animation:gS 3s ease infinite;border-radius:50px;z-index:-2}
+@keyframes gS{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+.start-btn::after{content:'';position:absolute;inset:3px;background:rgba(0,0,0,.85);border-radius:47px;z-index:-1}
+.start-btn:active::after{background:rgba(0,0,0,.6)}
+.start-btn span{position:relative;z-index:1;text-shadow:0 0 20px #fff}
+.start-btn:active{transform:scale(.95)}
+.deco-container{display:flex;align-items:center;gap:20px;margin-top:auto;padding-bottom:12vh}
+.deco-line{width:80px;height:2px;background:linear-gradient(90deg,transparent,#ff00ff,#00ffff,transparent);animation:lG 2s infinite}
+@keyframes lG{0%,100%{opacity:.5}50%{opacity:1}}
+.deco-diamond{width:12px;height:12px;background:linear-gradient(45deg,#ff00ff,#00ffff);transform:rotate(45deg);animation:dS 4s linear infinite;box-shadow:0 0 15px #ff00ff}
+@keyframes dS{from{transform:rotate(45deg)}to{transform:rotate(405deg)}}
+.clear-banner{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:linear-gradient(135deg,rgba(0,0,0,.95),rgba(20,0,40,.95));border:3px solid #00ffff;border-radius:20px;padding:30px 40px;text-align:center;z-index:10000;animation:bP .6s cubic-bezier(.68,-.55,.265,1.55);box-shadow:0 0 60px rgba(0,255,255,.5)}
+@keyframes bP{0%{transform:translate(-50%,-50%) scale(0);opacity:0}100%{transform:translate(-50%,-50%) scale(1);opacity:1}}
+.clear-banner-icon{font-size:3em;animation:iF 2s ease-in-out infinite}
+.clear-banner-title{font-size:1.8em;font-weight:900;color:#00ffff;text-shadow:0 0 20px #00ffff;margin:10px 0 5px}
+.clear-banner-sub{color:#aaa;font-size:.9em;margin-bottom:15px}
+.clear-banner-btn{background:linear-gradient(145deg,#00cccc,#009999);border:none;color:#fff;padding:12px 35px;font-size:1.1em;font-weight:bold;border-radius:30px;cursor:pointer}
+.clear-banner-btn:active{transform:scale(.95)}
+.hud{position:absolute;top:0;left:0;right:0;padding:8px 12px 8px 70px;display:flex;justify-content:space-between;align-items:center;background:linear-gradient(180deg,rgba(0,0,0,.9),transparent);z-index:10}
+.hud-item{display:flex;align-items:center;gap:5px;color:#fff;font-weight:bold}
+.lives{font-size:1.2em}
+.fever-gauge{width:80px;height:12px;background:#333;border-radius:6px;overflow:hidden;border:2px solid #666}
+.fever-fill{height:100%;background:linear-gradient(90deg,#ff00ff,#ffff00,#00ffff);background-size:200% 100%;animation:fGr 1s linear infinite;transition:width .3s}
+@keyframes fGr{to{background-position:200% 0%}}
+.score{color:#00ffff;font-size:1.1em;text-shadow:0 0 10px #00ffff}
+.combo-display{position:absolute;top:45px;right:15px;color:#ffff00;font-size:1.2em;font-weight:bold;text-shadow:0 0 15px #ffff00}
+.round-display{position:absolute;top:45px;left:70px;color:#00ff88;font-size:1em;font-weight:bold;text-shadow:0 0 10px #00ff88}
+.pass-display{position:absolute;top:70px;left:70px;color:#888;font-size:.9em;font-weight:bold}
+.timer-wrap{position:absolute;top:40px;left:0;right:0;height:8px;background:rgba(255,255,255,.1)}
+.timer-bar{height:100%;background:linear-gradient(90deg,#00ff88,#00ffff);transition:width .05s linear;box-shadow:0 0 10px currentColor}
+.timer-bar.warn{background:linear-gradient(90deg,#ffcc00,#ff9900)}
+.timer-bar.danger{background:linear-gradient(90deg,#ff0044,#ff0088);animation:tPu .2s infinite}
+@keyframes tPu{0%,100%{opacity:1}50%{opacity:.6}}
+#gameplay{background:linear-gradient(180deg,#0a0a2e,#1a0a2e)}
+.game-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;padding-top:80px;padding-bottom:10px;position:relative;overflow-y:auto}
+.fever-mode .game-area{animation:fBg .3s infinite alternate}
+@keyframes fBg{from{background:rgba(255,0,255,.15)}to{background:rgba(0,255,255,.15)}}
+.round-splash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:4em;font-weight:900;color:#fff;text-shadow:0 0 20px #fff,0 0 40px #00ffff;z-index:100;animation:spA .6s forwards}
+@keyframes spA{0%{opacity:0;transform:translate(-50%,-50%) scale(3) rotate(-10deg)}40%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(.5)}}
+.popup{position:fixed;top:45%;left:50%;transform:translate(-50%,-50%);font-size:2.5em;font-weight:bold;pointer-events:none;z-index:1000;animation:poA .5s forwards}
+@keyframes poA{0%{opacity:0;transform:translate(-50%,-50%) scale(.5)}30%{opacity:1;transform:translate(-50%,-50%) scale(1.2)}100%{opacity:0;transform:translate(-50%,-80%) scale(1)}}
+.popup.nice{color:#00ff88;text-shadow:0 0 30px #00ff88}
+.popup.great{color:#00ffff;text-shadow:0 0 30px #00ffff}
+.popup.perfect{color:#ff00ff;text-shadow:0 0 30px #ff00ff}
+.popup.miss{color:#ff0044;text-shadow:0 0 30px #ff0044}
+.popup.pass{color:#888;text-shadow:0 0 30px #888}
+.popup.fever{color:#fff;text-shadow:0 0 30px #ff00ff,0 0 60px #00ffff;font-size:3em}
+.flash{position:fixed;inset:0;pointer-events:none;z-index:999}
+.flash.hit{animation:flG .15s}.flash.miss{animation:flR .15s}.flash.pass{animation:flGr .15s}
+@keyframes flG{from{background:rgba(0,255,100,.4)}to{background:transparent}}
+@keyframes flR{from{background:rgba(255,0,50,.4)}to{background:transparent}}
+@keyframes flGr{from{background:rgba(128,128,128,.3)}to{background:transparent}}
+.q-text{color:#fff;font-size:1.2em;font-weight:bold;text-align:center;margin-bottom:6px;text-shadow:0 0 15px rgba(0,255,255,.5)}
+.q-country{color:#00ffff;font-size:1.5em;font-weight:900;text-shadow:0 0 20px #00ffff;margin-bottom:8px}
+.q-mode-badge{display:inline-block;padding:3px 12px;border-radius:20px;font-size:.75em;font-weight:bold;margin-bottom:8px}
+.badge-tap{background:rgba(255,0,102,.3);color:#ff6699;border:1px solid #ff3366}
+.badge-quiz{background:rgba(0,255,255,.15);color:#00ffcc;border:1px solid #00aa88}
+.badge-capital{background:rgba(255,128,0,.2);color:#ff8800;border:1px solid #cc6600}
+.badge-zoom{background:rgba(255,200,0,.2);color:#ffcc00;border:1px solid #cc9900}
+.map-container{position:relative;width:100%;max-width:460px;border:2px solid rgba(0,255,255,.3);border-radius:12px;overflow:hidden;cursor:crosshair;box-shadow:0 0 20px rgba(0,255,255,.15);background:#1b3a5c;aspect-ratio:4/3}
+.map-container img{width:100%;height:100%;display:block;object-fit:cover;pointer-events:none}
+.map-pin{position:absolute;width:16px;height:16px;border-radius:50%;transform:translate(-50%,-50%);z-index:5;pointer-events:none}
+.map-pin.target{background:#00ff88;box-shadow:0 0 15px #00ff88,0 0 30px #00ff88;animation:pnP 1s infinite}
+.map-pin.player{background:#ff0066;box-shadow:0 0 15px #ff0066}
+.map-pin.quiz-pin{background:#ffff00;box-shadow:0 0 20px #ffff00,0 0 40px #ffff00;animation:pnP .8s infinite;width:20px;height:20px}
+@keyframes pnP{0%,100%{transform:translate(-50%,-50%) scale(1)}50%{transform:translate(-50%,-50%) scale(1.5)}}
+.map-pin-ring{position:absolute;width:40px;height:40px;border:2px solid rgba(255,255,0,.5);border-radius:50%;transform:translate(-50%,-50%);z-index:4;pointer-events:none;animation:rnP 1.5s infinite}
+@keyframes rnP{0%{width:20px;height:20px;opacity:1}100%{width:60px;height:60px;opacity:0}}
+.map-line{position:absolute;height:2px;background:rgba(255,255,0,.6);transform-origin:0 50%;z-index:4;pointer-events:none}
+.distance-label{position:absolute;color:#ffff00;font-size:.8em;font-weight:bold;text-shadow:0 0 10px #ffff00,0 2px 4px rgba(0,0,0,.8);z-index:6;pointer-events:none;white-space:nowrap}
+.choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;max-width:460px;margin-top:8px}
+.choice-btn{padding:12px 8px;font-size:1em;font-weight:bold;border:2px solid rgba(0,255,255,.3);border-radius:12px;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.08);color:#fff}
+.choice-btn:active{transform:scale(.95)}
+.choice-btn:disabled{cursor:not-allowed;transform:none}
+.choice-btn.correct{background:rgba(0,255,100,.4);border-color:#00ff88;color:#00ff88}
+.choice-btn.wrong{background:rgba(255,0,50,.4);border-color:#ff0044;color:#ff4466}
+.pass-container{margin-top:6px;text-align:center}
+.game-btn{padding:10px 25px;margin:3px;font-size:1em;font-weight:bold;border:none;border-radius:12px;cursor:pointer;transition:all .2s}
+.game-btn:active{transform:scale(.95)}
+.game-btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-pass{background:linear-gradient(145deg,#666,#444);color:#ddd;padding:8px 20px;font-size:.9em}
+.btn-pass:disabled{background:linear-gradient(145deg,#333,#222);color:#555}
+.pass-remaining{color:#888;font-size:.8em;margin-top:2px}
+.tap-hint{color:#aaa;font-size:.8em;margin-top:4px;animation:hB 2s infinite}
+@keyframes hB{0%,100%{opacity:.5}50%{opacity:1}}
+#result{position:relative;overflow:hidden}
+#result.lose-bg{background:radial-gradient(ellipse at center,#1a1a3a,#0a0a1a)}
+#result .result-aurora{position:absolute;inset:0;background:radial-gradient(ellipse at 30% 30%,rgba(255,0,128,.2),transparent 50%),radial-gradient(ellipse at 70% 70%,rgba(0,255,255,.2),transparent 50%);animation:lAu 3s ease-in-out infinite alternate}
+@keyframes lAu{from{opacity:.5}to{opacity:1}}
+.confetti-container{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.confetti{position:absolute;top:-20px;animation:cFl linear infinite}
+@keyframes cFl{0%{transform:translateY(-20px) rotate(0);opacity:1}100%{transform:translateY(100vh) rotate(1080deg);opacity:.8}}
+.stars-container{position:absolute;inset:0;pointer-events:none}
+.star{position:absolute;font-size:1.5em;animation:sTw 1s ease-out forwards}
+@keyframes sTw{0%{transform:scale(0) rotate(0);opacity:1}50%{transform:scale(1.5) rotate(180deg);opacity:1}100%{transform:scale(0) rotate(360deg);opacity:0}}
+.result-content{position:relative;z-index:10;display:flex;flex-direction:column;align-items:center}
+.result-icon-container{position:relative;margin-bottom:20px}
+.result-icon{font-size:5em;animation:iEn .8s cubic-bezier(.68,-.55,.265,1.55);filter:drop-shadow(0 0 30px currentColor)}
+@keyframes iEn{0%{transform:scale(0) rotate(-180deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}
+.icon-ring{position:absolute;top:50%;left:50%;width:150px;height:150px;border:3px solid rgba(0,255,255,.3);border-radius:50%;transform:translate(-50%,-50%);animation:rEx 1.5s ease-out infinite}
+@keyframes rEx{0%{width:100px;height:100px;opacity:1}100%{width:250px;height:250px;opacity:0}}
+.result-title{font-size:2.2em;font-weight:900;text-transform:uppercase;margin-bottom:15px;color:#ff6688;text-shadow:0 0 20px #ff0044}
+.result-score-box{background:linear-gradient(135deg,rgba(0,0,0,.6),rgba(30,30,60,.6));border:2px solid rgba(0,255,255,.3);border-radius:20px;padding:20px 50px;margin:15px 0;text-align:center;box-shadow:0 0 30px rgba(0,255,255,.2);animation:bxA .5s ease-out .3s both}
+@keyframes bxA{from{transform:scale(.8);opacity:0}to{transform:scale(1);opacity:1}}
+.result-score-label{color:#888;font-size:.9em;text-transform:uppercase;letter-spacing:.3em;margin-bottom:8px}
+.result-score-value{font-size:3em;font-weight:900;color:#00ffff;text-shadow:0 0 30px #00ffff;font-family:'Courier New',monospace}
+.result-stats{background:rgba(0,0,0,.4);border-radius:15px;padding:15px 25px;margin:10px 0;border:1px solid rgba(255,255,255,.1);animation:bxA .5s ease-out .5s both}
+.stat-row{display:flex;justify-content:space-between;align-items:center;color:#fff;font-size:1em;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1);gap:30px}
+.stat-row:last-child{border-bottom:none}
+.stat-value{font-weight:bold;text-shadow:0 0 10px currentColor}
+.stat-value.cyan{color:#00ffff}.stat-value.gold{color:#ffd700}.stat-value.pink{color:#ff00ff}.stat-value.gray{color:#888}.stat-value.green{color:#00ff88}
+.result-buttons{display:flex;flex-direction:column;gap:10px;margin-top:20px;animation:bxA .5s ease-out .7s both}
+.btn{background:linear-gradient(145deg,#ff0066,#cc0052);color:#fff;border:none;padding:16px 45px;font-size:1.2em;font-weight:bold;border-radius:50px;cursor:pointer;box-shadow:0 5px 30px rgba(255,0,102,.5);position:relative;overflow:hidden;text-transform:uppercase;letter-spacing:.1em}
+.btn::after{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:linear-gradient(45deg,transparent,rgba(255,255,255,.3),transparent);transform:rotate(45deg);animation:bSh 2s infinite}
+@keyframes bSh{0%{left:-50%}100%{left:150%}}
+.btn:active{transform:scale(.95)}
+.btn-cyan{background:linear-gradient(145deg,#00cccc,#009999);box-shadow:0 5px 30px rgba(0,204,204,.5)}
+.btn-green{background:linear-gradient(145deg,#00cc66,#009944);box-shadow:0 5px 30px rgba(0,204,102,.5)}
+.btn-small{padding:12px 30px;font-size:1em}
+.highscore-badge{background:linear-gradient(145deg,#ffd700,#ff8800);color:#000;padding:8px 20px;border-radius:30px;font-weight:bold;font-size:1.1em;margin-bottom:15px;animation:bdP .5s ease-out 1s both;box-shadow:0 0 30px rgba(255,215,0,.5)}
+@keyframes bdP{0%{transform:scale(0)}50%{transform:scale(1.2)}100%{transform:scale(1)}}
+.clear-badge{background:linear-gradient(145deg,#00ffff,#0088ff);color:#000;padding:8px 20px;border-radius:30px;font-weight:bold;font-size:1.1em;margin-bottom:10px;animation:bdP .5s ease-out .8s both;box-shadow:0 0 30px rgba(0,255,255,.5)}
+</style>
+</head>
+<body>
+<button class="back-btn" onclick="goBack()">←</button>
+<div id="game">
+<div class="flash" id="flash"></div>
+<div id="title" class="screen active">
+<div class="bg-effects"><div class="cyber-grid"></div><div class="aurora"></div><div class="particles" id="particles"></div><div class="scanlines"></div></div>
+<div class="title-content">
+<div class="title-logo"><span class="title-icon">🌍</span><div class="title-text">GEO QUEST</div><div class="title-sub">WORLD MAP</div></div>
+<div class="start-btn-wrap"><button class="start-btn" onclick="startGame()"><span>▶ START</span></button></div>
+<div style="color:#00ffff;font-size:1.2em;text-shadow:0 0 15px #00ffff">🏆 BEST: <span id="best-score">0</span></div>
+<div class="deco-container"><div class="deco-line"></div><div class="deco-diamond"></div><div class="deco-line"></div></div>
+</div>
+</div>
+<div id="gameplay" class="screen">
+<div class="hud">
+<div class="hud-item"><span class="lives" id="lives">❤️❤️❤️</span></div>
+<div class="hud-item"><span style="font-size:.8em">🔥</span><div class="fever-gauge"><div class="fever-fill" id="fever-fill" style="width:0%"></div></div></div>
+<div class="hud-item"><span class="score" id="score">0</span></div>
+</div>
+<div class="round-display" id="round-display">ROUND 1</div>
+<div class="pass-display">⏭ <span id="pass-icons">⚪⚪⚪</span></div>
+<div class="combo-display" id="combo"></div>
+<div class="timer-wrap"><div class="timer-bar" id="timer"></div></div>
+<div class="game-area" id="area"></div>
+</div>
+<div id="result" class="screen">
+<div class="result-aurora"></div>
+<div class="confetti-container" id="confetti"></div>
+<div class="stars-container" id="stars"></div>
+<div class="result-content" id="result-content"></div>
+</div>
+</div>
+<script>
+const gameNum=location.href.match(/game(\d+)/)?.[1]||'?';
+document.title='Game '+gameNum;
+const CLEAR_GOAL=15;
+function goBack(){location.href='index.html?menu=1'}
+function saveClear(){localStorage.setItem('gameClear_'+gameNum,'true')}
+const hsKey='geoHS_'+gameNum;
+let highScore=parseInt(localStorage.getItem(hsKey))||0;
+document.getElementById('best-score').textContent=highScore.toLocaleString();
+
+// ===== OSMタイル =====
+const TILE='https://tile.openstreetmap.org';
+const mapCache={};
+
+function lngLatToTile(lng,lat,z){
+    const n=Math.pow(2,z);
+    const x=((lng+180)/360)*n;
+    const latR=lat*Math.PI/180;
+    const y=(1-Math.log(Math.tan(latR)+1/Math.cos(latR))/Math.PI)/2*n;
+    return{tx:Math.floor(x),ty:Math.floor(y),n};
+}
+
+function tileBounds(tx,ty,n){
+    const w=tx/n*360-180;
+    const e=(tx+1)/n*360-180;
+    const nR=Math.atan(Math.sinh(Math.PI*(1-2*ty/n)));
+    const sR=Math.atan(Math.sinh(Math.PI*(1-2*(ty+1)/n)));
+    return{west:w,east:e,north:nR*180/Math.PI,south:sR*180/Math.PI};
+}
+
+function lngLatToPercent(lng,lat,bounds){
+    const{west,east,north,south}=bounds;
+    const x=(lng-west)/(east-west)*100;
+    const mrc=l=>Math.log(Math.tan(Math.PI/4+l*Math.PI/360));
+    const y=(mrc(north)-mrc(lat))/(mrc(north)-mrc(south))*100;
+    return{x:Math.max(0,Math.min(100,x)),y:Math.max(0,Math.min(100,y))};
+}
+
+function loadMap(zoom,centerLng,centerLat,tw,th){
+    return new Promise(resolve=>{
+        const key=`${zoom}_${Math.round(centerLng)}_${Math.round(centerLat)}_${tw}_${th}`;
+        if(mapCache[key]){resolve(mapCache[key]);return}
+        const c=lngLatToTile(centerLng,centerLat,zoom);
+        const stx=c.tx-Math.floor(tw/2);
+        const sty=c.ty-Math.floor(th/2);
+        const cv=document.createElement('canvas');
+        cv.width=tw*256;cv.height=th*256;
+        const ctx=cv.getContext('2d');
+        ctx.fillStyle='#a0c4e8';ctx.fillRect(0,0,cv.width,cv.height);
+        let loaded=0;const total=tw*th;
+        const bW=tileBounds(stx,sty,c.n);
+        const bE=tileBounds(stx+tw-1,sty+th-1,c.n);
+        const bounds={west:bW.west,east:bE.east,north:bW.north,south:bE.south};
+        for(let dy=0;dy<th;dy++){
+            for(let dx=0;dx<tw;dx++){
+                let txx=(stx+dx)%c.n;if(txx<0)txx+=c.n;
+                const tyy=sty+dy;
+                if(tyy<0||tyy>=c.n){loaded++;if(loaded===total){mapCache[key]={src:cv.toDataURL(),bounds};resolve(mapCache[key])}continue}
+                const img=new Image();img.crossOrigin='anonymous';
+                img.onload=function(){ctx.drawImage(img,dx*256,dy*256);loaded++;if(loaded===total){mapCache[key]={src:cv.toDataURL(),bounds};resolve(mapCache[key])}};
+                img.onerror=function(){loaded++;if(loaded===total){mapCache[key]={src:cv.toDataURL(),bounds};resolve(mapCache[key])}};
+                img.src=`${TILE}/${zoom}/${txx}/${tyy}.png`;
+            }
+        }
+    });
+}
+
+// 100ヶ国
+const L=[
+{name:'日本',lng:138,lat:36,capital:'東京'},
+{name:'アメリカ',lng:-98,lat:38,capital:'ワシントンD.C.'},
+{name:'ブラジル',lng:-53,lat:-10,capital:'ブラジリア'},
+{name:'イギリス',lng:-2,lat:53,capital:'ロンドン'},
+{name:'フランス',lng:2,lat:47,capital:'パリ'},
+{name:'ドイツ',lng:10,lat:51,capital:'ベルリン'},
+{name:'ロシア',lng:60,lat:56,capital:'モスクワ'},
+{name:'インド',lng:79,lat:22,capital:'ニューデリー'},
+{name:'中国',lng:104,lat:35,capital:'北京'},
+{name:'オーストラリア',lng:134,lat:-25,capital:'キャンベラ'},
+{name:'エジプト',lng:30,lat:27,capital:'カイロ'},
+{name:'南アフリカ',lng:25,lat:-30,capital:'プレトリア'},
+{name:'カナダ',lng:-106,lat:56,capital:'オタワ'},
+{name:'メキシコ',lng:-102,lat:23,capital:'メキシコシティ'},
+{name:'アルゼンチン',lng:-64,lat:-34,capital:'ブエノスアイレス'},
+{name:'イタリア',lng:12,lat:42,capital:'ローマ'},
+{name:'スペイン',lng:-4,lat:40,capital:'マドリード'},
+{name:'トルコ',lng:35,lat:39,capital:'アンカラ'},
+{name:'サウジアラビア',lng:45,lat:24,capital:'リヤド'},
+{name:'タイ',lng:101,lat:15,capital:'バンコク'},
+{name:'韓国',lng:128,lat:36,capital:'ソウル'},
+{name:'インドネシア',lng:118,lat:-2,capital:'ジャカルタ'},
+{name:'ナイジェリア',lng:8,lat:10,capital:'アブジャ'},
+{name:'ケニア',lng:38,lat:1,capital:'ナイロビ'},
+{name:'ペルー',lng:-76,lat:-10,capital:'リマ'},
+{name:'コロンビア',lng:-74,lat:4,capital:'ボゴタ'},
+{name:'ノルウェー',lng:10,lat:62,capital:'オスロ'},
+{name:'スウェーデン',lng:16,lat:62,capital:'ストックホルム'},
+{name:'ポーランド',lng:20,lat:52,capital:'ワルシャワ'},
+{name:'ギリシャ',lng:22,lat:39,capital:'アテネ'},
+{name:'イラン',lng:53,lat:33,capital:'テヘラン'},
+{name:'パキスタン',lng:69,lat:30,capital:'イスラマバード'},
+{name:'ベトナム',lng:106,lat:16,capital:'ハノイ'},
+{name:'フィリピン',lng:122,lat:12,capital:'マニラ'},
+{name:'ニュージーランド',lng:174,lat:-41,capital:'ウェリントン'},
+{name:'モロッコ',lng:-6,lat:32,capital:'ラバト'},
+{name:'アイスランド',lng:-19,lat:65,capital:'レイキャビク'},
+{name:'キューバ',lng:-79,lat:22,capital:'ハバナ'},
+{name:'マダガスカル',lng:47,lat:-19,capital:'アンタナナリボ'},
+{name:'モンゴル',lng:104,lat:47,capital:'ウランバートル'},
+{name:'ウクライナ',lng:31,lat:49,capital:'キーウ'},
+{name:'ポルトガル',lng:-8,lat:39,capital:'リスボン'},
+{name:'チリ',lng:-71,lat:-33,capital:'サンティアゴ'},
+{name:'ベネズエラ',lng:-66,lat:8,capital:'カラカス'},
+{name:'エクアドル',lng:-78,lat:-1,capital:'キト'},
+{name:'ボリビア',lng:-65,lat:-17,capital:'ラパス'},
+{name:'パラグアイ',lng:-58,lat:-23,capital:'アスンシオン'},
+{name:'ウルグアイ',lng:-56,lat:-33,capital:'モンテビデオ'},
+{name:'アルジェリア',lng:3,lat:28,capital:'アルジェ'},
+{name:'リビア',lng:17,lat:27,capital:'トリポリ'},
+{name:'チュニジア',lng:9,lat:34,capital:'チュニス'},
+{name:'スーダン',lng:30,lat:16,capital:'ハルツーム'},
+{name:'エチオピア',lng:39,lat:9,capital:'アディスアベバ'},
+{name:'タンザニア',lng:35,lat:-6,capital:'ドドマ'},
+{name:'コンゴ民主共和国',lng:24,lat:-3,capital:'キンシャサ'},
+{name:'アンゴラ',lng:18,lat:-12,capital:'ルアンダ'},
+{name:'モザンビーク',lng:35,lat:-18,capital:'マプト'},
+{name:'ガーナ',lng:-1,lat:8,capital:'アクラ'},
+{name:'カメルーン',lng:12,lat:6,capital:'ヤウンデ'},
+{name:'コートジボワール',lng:-5,lat:7,capital:'ヤムスクロ'},
+{name:'セネガル',lng:-14,lat:14,capital:'ダカール'},
+{name:'マリ',lng:-2,lat:17,capital:'バマコ'},
+{name:'ニジェール',lng:8,lat:17,capital:'ニアメ'},
+{name:'チャド',lng:19,lat:15,capital:'ンジャメナ'},
+{name:'イラク',lng:44,lat:33,capital:'バグダッド'},
+{name:'シリア',lng:38,lat:35,capital:'ダマスカス'},
+{name:'ヨルダン',lng:36,lat:31,capital:'アンマン'},
+{name:'イスラエル',lng:35,lat:31,capital:'エルサレム'},
+{name:'アフガニスタン',lng:67,lat:34,capital:'カブール'},
+{name:'ミャンマー',lng:97,lat:20,capital:'ネーピードー'},
+{name:'マレーシア',lng:102,lat:4,capital:'クアラルンプール'},
+{name:'カンボジア',lng:105,lat:13,capital:'プノンペン'},
+{name:'バングラデシュ',lng:90,lat:24,capital:'ダッカ'},
+{name:'スリランカ',lng:81,lat:8,capital:'コロンボ'},
+{name:'ネパール',lng:84,lat:28,capital:'カトマンズ'},
+{name:'カザフスタン',lng:67,lat:48,capital:'アスタナ'},
+{name:'ウズベキスタン',lng:64,lat:41,capital:'タシケント'},
+{name:'フィンランド',lng:26,lat:64,capital:'ヘルシンキ'},
+{name:'デンマーク',lng:10,lat:56,capital:'コペンハーゲン'},
+{name:'オランダ',lng:5,lat:52,capital:'アムステルダム'},
+{name:'ベルギー',lng:4,lat:51,capital:'ブリュッセル'},
+{name:'スイス',lng:8,lat:47,capital:'ベルン'},
+{name:'オーストリア',lng:14,lat:47,capital:'ウィーン'},
+{name:'チェコ',lng:15,lat:50,capital:'プラハ'},
+{name:'ハンガリー',lng:19,lat:47,capital:'ブダペスト'},
+{name:'ルーマニア',lng:25,lat:46,capital:'ブカレスト'},
+{name:'ブルガリア',lng:25,lat:43,capital:'ソフィア'},
+{name:'セルビア',lng:21,lat:44,capital:'ベオグラード'},
+{name:'クロアチア',lng:16,lat:45,capital:'ザグレブ'},
+{name:'アイルランド',lng:-8,lat:53,capital:'ダブリン'},
+{name:'台湾',lng:121,lat:24,capital:'台北'},
+{name:'北朝鮮',lng:127,lat:40,capital:'平壌'},
+{name:'ラオス',lng:103,lat:18,capital:'ビエンチャン'},
+{name:'パプアニューギニア',lng:145,lat:-6,capital:'ポートモレスビー'},
+{name:'キルギス',lng:75,lat:41,capital:'ビシュケク'},
+{name:'ジョージア',lng:44,lat:42,capital:'トビリシ'},
+{name:'アルメニア',lng:45,lat:40,capital:'エレバン'},
+{name:'パナマ',lng:-80,lat:9,capital:'パナマシティ'},
+{name:'コスタリカ',lng:-84,lat:10,capital:'サンホセ'},
+{name:'グアテマラ',lng:-90,lat:15,capital:'グアテマラシティ'},
+{name:'ドミニカ共和国',lng:-70,lat:19,capital:'サントドミンゴ'},
+{name:'ジンバブエ',lng:30,lat:-20,capital:'ハラレ'},
+{name:'ザンビア',lng:28,lat:-14,capital:'ルサカ'}
+];
+
+const TH_P=4,TH_G=7,TH_N=12;
+let usedIdx=[],curLoc=null,mapClickable=false,curBounds=null;
+
+function shuffle(a){const b=[...a];for(let i=b.length-1;i>0;i--){const j=0|Math.random()*(i+1);[b[i],b[j]]=[b[j],b[i]]}return b}
+function pick(){if(usedIdx.length>=L.length)usedIdx=[];const av=L.map((_,i)=>i).filter(i=>!usedIdx.includes(i));const idx=av[0|Math.random()*av.length];usedIdx.push(idx);return L[idx]}
+function dst(a,b,c,d){return Math.hypot(a-c,b-d)}
+
+function createParticles(){const c=document.getElementById('particles');for(let i=0;i<25;i++){const p=document.createElement('div');p.className='particle';p.style.left=Math.random()*100+'%';p.style.animationDelay=Math.random()*10+'s';p.style.animationDuration=(8+Math.random()*8)+'s';const s=2+Math.random()*5;p.style.width=s+'px';p.style.height=s+'px';const cs=['#ff00ff','#00ffff','#ffff00','#ff0088','#00ff88'];const cl=cs[0|Math.random()*cs.length];p.style.background=cl;p.style.boxShadow=`0 0 ${s*3}px ${cl}`;c.appendChild(p)}}
+createParticles();
+function createConfetti(){const c=document.getElementById('confetti');c.innerHTML='';for(let i=0;i<60;i++){const d=document.createElement('div');d.className='confetti';d.textContent='■●▲★◆'[0|Math.random()*5];d.style.left=Math.random()*100+'%';d.style.color=['#ff0066','#00ffff','#ffff00','#ff00ff','#00ff88','#ff8800'][0|Math.random()*6];d.style.fontSize=(10+Math.random()*12)+'px';d.style.animationDuration=(2+Math.random()*3)+'s';d.style.animationDelay=Math.random()*2+'s';c.appendChild(d)}}
+function createStars(){const c=document.getElementById('stars');c.innerHTML='';for(let i=0;i<15;i++)setTimeout(()=>{const s=document.createElement('div');s.className='star';s.textContent='✦';s.style.left=Math.random()*100+'%';s.style.top=Math.random()*100+'%';s.style.color=['#ffd700','#fff','#00ffff'][0|Math.random()*3];c.appendChild(s);setTimeout(()=>s.remove(),1000)},i*200)}
+
+let G={round:0,lives:3,score:0,combo:0,maxCombo:0,fever:0,isFever:false,timer:null,timeLeft:0,baseTime:10000,passUsed:0,maxPass:3,cleared:false};
+function showScreen(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.getElementById('gameplay').classList.remove('fever-mode')}
+function render(h){document.getElementById('area').innerHTML=h}
+function showSplash(t,cb,d=500){render('<div class="round-splash">'+t+'</div>');setTimeout(cb,d)}
+function updateHUD(){document.getElementById('lives').textContent='❤️'.repeat(G.lives)+'🖤'.repeat(3-G.lives);document.getElementById('score').textContent=G.score.toLocaleString();document.getElementById('combo').textContent=G.combo>1?G.combo+'コンボ!':'';document.getElementById('fever-fill').style.width=Math.min(G.fever,100)+'%';document.getElementById('round-display').textContent='ROUND '+G.round;document.getElementById('pass-icons').textContent='⚪'.repeat(G.maxPass-G.passUsed)+'⚫'.repeat(G.passUsed)}
+function getTime(){return Math.max(4000,G.baseTime-(G.round-1)*100)}
+function startTimer(time,onT){clearInterval(G.timer);G.timeLeft=time;const bar=document.getElementById('timer');bar.style.width='100%';bar.className='timer-bar';G.timer=setInterval(()=>{G.timeLeft-=30;const p=G.timeLeft/time*100;bar.style.width=p+'%';if(p<25)bar.className='timer-bar danger';else if(p<50)bar.className='timer-bar warn';if(G.timeLeft<=0){clearInterval(G.timer);if(onT)onT()}},30)}
+function stopTimer(){clearInterval(G.timer)}
+function startGame(){G={round:0,lives:3,score:0,combo:0,maxCombo:0,fever:0,isFever:false,timer:null,timeLeft:0,baseTime:10000,passUsed:0,maxPass:3,cleared:false};usedIdx=[];showScreen('gameplay');showSplash('READY',()=>showSplash('GO!',nextRound,300),400)}
+function nextRound(){if(G.lives<=0)return endGame();G.round++;updateHUD();if(G.round>=CLEAR_GOAL&&!G.cleared){G.cleared=true;saveClear();showClearBanner();return}if(G.fever>=100&&!G.isFever){G.isFever=true;document.getElementById('gameplay').classList.add('fever-mode');pop('🔥 FEVER! 🔥','fever')}if(G.round%10===1&&G.round>1)showSplash('🔥 '+G.round+'!',playRound,400);else playRound()}
+function showClearBanner(){const b=document.createElement('div');b.className='clear-banner';b.innerHTML='<div class="clear-banner-icon">🎊</div><div class="clear-banner-title">GAME CLEAR!</div><div class="clear-banner-sub">ROUND '+CLEAR_GOAL+' 到達！<br>クリア記録を保存しました<br><br>ゲームオーバーまで続けよう！</div><button class="clear-banner-btn" id="clrBtn">▶ 続ける</button>';document.body.appendChild(b);document.getElementById('clrBtn').onclick=()=>{b.remove();if(G.fever>=100&&!G.isFever){G.isFever=true;document.getElementById('gameplay').classList.add('fever-mode');pop('🔥 FEVER! 🔥','fever')}playRound()}}
+function passBtn(){const pr=G.maxPass-G.passUsed;return '<div class="pass-container"><button class="game-btn btn-pass" onclick="handlePass()" '+(pr<=0?'disabled':'')+'>⏭ パス</button><div class="pass-remaining">残り '+pr+' 回</div></div>'}
+
+// ===== 4モード =====
+const modes=['tapZoom','quiz4','capitalQuiz','zoomQuiz'];
+
+function playRound(){
+    curLoc=pick();
+    curLoc._px=null;curLoc._py=null;
+    const mode=modes[0|Math.random()*modes.length];
+    render('<div style="text-align:center;color:#888;padding:40px">🌍 Loading...</div>');
+    window['mode_'+mode]();
+}
+
+// ズーム：2〜4でランダム
+function getZoom(){return 2+Math.floor(Math.random()*3)} // 2,3,4
+
+// モード1: 拡大タップ
+function mode_tapZoom(){
+    mapClickable=true;
+    const z=getZoom();
+    const jx=(Math.random()-.5)*20;
+    const jy=(Math.random()-.5)*15;
+    loadMap(z,curLoc.lng+jx,curLoc.lat+jy,4,3).then(m=>{
+        curBounds=m.bounds;
+        const p=lngLatToPercent(curLoc.lng,curLoc.lat,curBounds);
+        curLoc._px=p.x;curLoc._py=p.y;
+        render('<div style="text-align:center;width:100%"><div class="q-mode-badge badge-tap">🔍 タップで探せ</div><div class="q-text">この国をタップ！</div><div class="q-country">'+curLoc.name+'</div><div class="map-container" id="mapC"><img src="'+m.src+'"></div><div class="tap-hint">👆 地図をタップ</div>'+passBtn()+'</div>');
+        document.getElementById('mapC').onclick=onTapClick;
+        startTimer(getTime(),()=>{mapClickable=false;handleTimeout()});
+    });
+}
+
+// モード2: ピン→4択国名
+function mode_quiz4(){
+    const z=getZoom();
+    loadMap(z,curLoc.lng,curLoc.lat,4,3).then(m=>{
+        curBounds=m.bounds;
+        const p=lngLatToPercent(curLoc.lng,curLoc.lat,curBounds);
+        curLoc._px=p.x;curLoc._py=p.y;
+        const nearby=L.filter(l=>l.name!==curLoc.name).sort((a,b)=>dst(a.lng,a.lat,curLoc.lng,curLoc.lat)-dst(b.lng,b.lat,curLoc.lng,curLoc.lat));
+        const wrong=shuffle(nearby.slice(0,8)).slice(0,3);
+        const choices=shuffle([curLoc,...wrong]);
+        render('<div style="text-align:center;width:100%"><div class="q-mode-badge badge-quiz">📌 ピン当て4択</div><div class="q-text">ピンの場所はどこ？</div><div class="map-container" id="mapC"><img src="'+m.src+'"></div><div class="choice-grid">'+choices.map(c=>'<button class="choice-btn" data-name="'+c.name+'" onclick="onQuiz(this,\''+esc(c.name)+'\')">'+c.name+'</button>').join('')+'</div>'+passBtn()+'</div>');
+        setTimeout(()=>{const mc=document.getElementById('mapC');if(mc){addPin(mc,curLoc._px,curLoc._py,'quiz-pin');addRing(mc,curLoc._px,curLoc._py)}},50);
+        startTimer(getTime(),()=>handleTimeout());
+    });
+}
+
+// モード3: 首都→4択
+function mode_capitalQuiz(){
+    const wrong=shuffle(L.filter(l=>l.name!==curLoc.name)).slice(0,3);
+    const choices=shuffle([curLoc,...wrong]);
+    render('<div style="text-align:center;width:100%"><div class="q-mode-badge badge-capital">🏛️ 首都クイズ</div><div class="q-text">この首都がある国は？</div><div class="q-country">'+curLoc.capital+'</div><div class="choice-grid">'+choices.map(c=>'<button class="choice-btn" data-name="'+c.name+'" onclick="onQuiz(this,\''+esc(c.name)+'\')">'+c.name+'</button>').join('')+'</div>'+passBtn()+'</div>');
+    startTimer(getTime(),()=>handleTimeout());
+}
+
+// モード4: ズーム4択（近隣国で難易度UP）
+function mode_zoomQuiz(){
+    const z=3+Math.floor(Math.random()*2); // 3 or 4
+    loadMap(z,curLoc.lng,curLoc.lat,4,3).then(m=>{
+        curBounds=m.bounds;
+        const p=lngLatToPercent(curLoc.lng,curLoc.lat,curBounds);
+        curLoc._px=p.x;curLoc._py=p.y;
+        const nearby=L.filter(l=>l.name!==curLoc.name).sort((a,b)=>dst(a.lng,a.lat,curLoc.lng,curLoc.lat)-dst(b.lng,b.lat,curLoc.lng,curLoc.lat));
+        const wrong=nearby.slice(0,3);
+        const choices=shuffle([curLoc,...wrong]);
+        render('<div style="text-align:center;width:100%"><div class="q-mode-badge badge-zoom">🔎 ズーム4択</div><div class="q-text">ピンの場所はどこ？</div><div class="map-container" id="mapC"><img src="'+m.src+'"></div><div class="choice-grid">'+choices.map(c=>'<button class="choice-btn" data-name="'+c.name+'" onclick="onQuiz(this,\''+esc(c.name)+'\')">'+c.name+'</button>').join('')+'</div>'+passBtn()+'</div>');
+        setTimeout(()=>{const mc=document.getElementById('mapC');if(mc){addPin(mc,curLoc._px,curLoc._py,'quiz-pin');addRing(mc,curLoc._px,curLoc._py)}},50);
+        startTimer(getTime(),()=>handleTimeout());
+    });
+}
+
+function esc(s){return s.replace(/'/g,"\\'")}
+function addPin(c,x,y,cls){const p=document.createElement('div');p.className='map-pin '+cls;p.style.left=x+'%';p.style.top=y+'%';c.appendChild(p)}
+function addRing(c,x,y){const r=document.createElement('div');r.className='map-pin-ring';r.style.left=x+'%';r.style.top=y+'%';c.appendChild(r)}
+
+function onTapClick(e){
+    if(!mapClickable)return;mapClickable=false;stopTimer();
+    const c=document.getElementById('mapC'),r=c.getBoundingClientRect();
+    const cx=((e.clientX-r.left)/r.width)*100,cy=((e.clientY-r.top)/r.height)*100;
+    const d=dst(cx,cy,curLoc._px,curLoc._py);
+    showPins(c,cx,cy,curLoc._px,curLoc._py);
+    setTimeout(()=>{d<=TH_N?handleCorrect(d):handleWrong()},800);
+}
+
+function showPins(c,px,py,tx,ty){
+    addPin(c,px,py,'player');addPin(c,tx,ty,'target');
+    const cw=c.offsetWidth,ch=c.offsetHeight;
+    const dx=(tx-px)/100*cw,dy=(ty-py)/100*ch;
+    const len=Math.hypot(dx,dy),ang=Math.atan2(dy,dx)*180/Math.PI;
+    const ln=document.createElement('div');ln.className='map-line';ln.style.left=px+'%';ln.style.top=py+'%';ln.style.width=len+'px';ln.style.transform='rotate('+ang+'deg)';c.appendChild(ln);
+    const d=dst(px,py,tx,ty);
+    const lb=document.createElement('div');lb.className='distance-label';lb.textContent='≈'+Math.round(d*120).toLocaleString()+'km';lb.style.left=((px+tx)/2)+'%';lb.style.top=((py+ty)/2-4)+'%';c.appendChild(lb);
+}
+
+function onQuiz(btn,name){
+    stopTimer();document.querySelectorAll('.choice-btn').forEach(b=>b.disabled=true);
+    if(name===curLoc.name){btn.classList.add('correct');handleCorrect(0)}
+    else{btn.classList.add('wrong');const cor=document.querySelector('.choice-btn[data-name="'+curLoc.name+'"]');if(cor)cor.classList.add('correct');setTimeout(handleWrong,500)}
+}
+
+function handleCorrect(d){
+    G.combo++;if(G.combo>G.maxCombo)G.maxCombo=G.combo;
+    const mult=G.isFever?2:1;let base=100;
+    if(d<=TH_P)base=300;else if(d<=TH_G)base=200;
+    const pts=(base+G.combo*25)*mult;G.score+=pts;G.fever=Math.min(G.fever+15,100);
+    fl('hit');
+    if(d<=TH_P||d===0)pop('🌟 PERFECT!','perfect');
+    else if(d<=TH_G)pop('GREAT!','great');
+    else pop('+'+pts,'nice');
+    updateHUD();setTimeout(nextRound,600);
+}
+function handleWrong(){
+    stopTimer();G.lives--;G.combo=0;G.fever=Math.max(G.fever-30,0);G.isFever=false;
+    document.getElementById('gameplay').classList.remove('fever-mode');
+    fl('miss');pop('MISS...','miss');updateHUD();
+    setTimeout(()=>{G.lives<=0?endGame():nextRound()},800);
+}
+function handleTimeout(){
+    const c=document.getElementById('mapC');
+    if(c&&curLoc._px!=null)addPin(c,curLoc._px,curLoc._py,'target');
+    document.querySelectorAll('.choice-btn').forEach(b=>{b.disabled=true;if(b.dataset.name===curLoc.name)b.classList.add('correct')});
+    G.lives--;G.combo=0;G.fever=Math.max(G.fever-30,0);G.isFever=false;
+    document.getElementById('gameplay').classList.remove('fever-mode');
+    fl('miss');pop('TIME UP...','miss');updateHUD();
+    setTimeout(()=>{G.lives<=0?endGame():nextRound()},800);
+}
+function handlePass(){
+    if(G.passUsed>=G.maxPass)return;mapClickable=false;stopTimer();
+    G.passUsed++;G.combo=0;G.fever=Math.max(G.fever-10,0);
+    fl('pass');pop('PASS','pass');updateHUD();setTimeout(nextRound,300);
+}
+function pop(t,ty){const p=document.createElement('div');p.className='popup '+ty;p.textContent=t;document.body.appendChild(p);setTimeout(()=>p.remove(),600)}
+function fl(ty){const f=document.getElementById('flash');f.className='flash '+ty;setTimeout(()=>f.className='flash',200)}
+
+function endGame(){
+    stopTimer();mapClickable=false;
+    const isHS=G.score>highScore;if(isHS){highScore=G.score;localStorage.setItem(hsKey,highScore);document.getElementById('best-score').textContent=highScore.toLocaleString()}
+    document.getElementById('result').className='screen lose-bg';
+    const cb=G.cleared?'<div class="clear-badge">✅ GAME CLEARED!</div>':'';
+    const mb=G.cleared?'<button class="btn btn-green btn-small" onclick="goBack()">🎉 メニューに戻る</button>':'';
+    document.getElementById('result-content').innerHTML=
+        (isHS?'<div class="highscore-badge">🎉 NEW HIGH SCORE!</div>':'')+cb+
+        '<div class="result-icon-container"><div class="icon-ring"></div><div class="result-icon">'+(isHS?'🏆':(G.cleared?'🌍':'💀'))+'</div></div>'+
+        '<div class="result-title">GAME OVER</div>'+
+        '<div class="result-score-box"><div class="result-score-label">Total Score</div><div class="result-score-value" id="score-counter">0</div></div>'+
+        '<div class="result-stats">'+
+        '<div class="stat-row"><span>🎯 到達ラウンド</span><span class="stat-value cyan">'+G.round+'</span></div>'+
+        '<div class="stat-row"><span>🔥 最大コンボ</span><span class="stat-value gold">'+G.maxCombo+'</span></div>'+
+        '<div class="stat-row"><span>⏭ パス使用</span><span class="stat-value gray">'+G.passUsed+'/'+G.maxPass+'</span></div>'+
+        '<div class="stat-row"><span>✅ クリア</span><span class="stat-value green">'+(G.cleared?'達成！':'未達成')+'</span></div>'+
+        '<div class="stat-row"><span>🏆 ハイスコア</span><span class="stat-value pink">'+highScore.toLocaleString()+'</span></div>'+
+        '</div><div class="result-buttons"><button class="btn" onclick="startGame()">🔄 RETRY</button>'+mb+
+        '<button class="btn btn-cyan btn-small" onclick="showScreen(\'title\')">🏠 TITLE</button></div>';
+    showScreen('result');
+    let cur=0;const tgt=G.score,step=tgt/(1500/16),ctr=document.getElementById('score-counter');
+    const cu=setInterval(()=>{cur+=step;if(cur>=tgt){cur=tgt;clearInterval(cu)}ctr.textContent=Math.floor(cur).toLocaleString()},16);
+    if(isHS||G.cleared){createConfetti();createStars()}
+}
+</script>
+</body>
+</html>
